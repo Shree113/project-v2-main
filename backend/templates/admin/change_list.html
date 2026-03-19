@@ -1,0 +1,56 @@
+{% extends "admin/change_list.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+/* Force the filter to stay on the right side of the search bar and table globally */
+/* The #changelist div contains both the main form-container (Search + Table) and the filter sidebar */
+
+#changelist {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 20px !important;
+    flex-wrap: nowrap !important;
+}
+
+/* Ensure the table space shrinks appropriately instead of pushing the filter down */
+.changelist-form-container {
+    flex: 1 1 auto !important;
+    min-width: 0 !important; /* Prevents overflow issues causing wrapping */
+    overflow-x: auto !important; /* Allow the table to scroll horizontally if needed */
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Force the filter to stay on the right side as a sidebar */
+#changelist-filter {
+    position: static !important;
+    flex: 0 0 280px !important; /* Set a fixed width for the filter sidebar */
+    width: 280px !important;
+    margin: 0 !important;
+    order: 2 !important; /* Visually ensure it stays to the right */
+    display: block !important;
+}
+
+/* The search bar (toolbar) and table (changelist-form) remain stacked vertically by default inside form-container */
+
+/* Optional: Improve filter display in forced narrow views */
+@media (max-width: 768px) {
+    /* Only allow it to wrap if the screen is super small like a mobile phone */
+    #changelist {
+        flex-direction: column !important;
+    }
+    .changelist-form-container {
+        width: 100% !important;
+    }
+    #changelist-filter {
+        flex: 1 1 auto !important;
+        width: 100% !important;
+        order: 2 !important;
+        margin-top: 20px !important;
+    }
+}
+</style>
+{% endblock %}

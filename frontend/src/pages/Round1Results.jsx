@@ -7,26 +7,16 @@ export default function Round1Results() {
   const navigate = useNavigate();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [leaderboard, setLeaderboard] = useState([]);
 
   useEffect(() => {
     const studentId = localStorage.getItem('studentId');
     if (!studentId) { navigate('/'); return; }
 
-    // Fetch round 1 completion result
-    const storedResult = localStorage.getItem('round1Result');
-    if (storedResult) {
-      setResult(JSON.parse(storedResult));
+    const stored = localStorage.getItem('round1Result');
+    if (stored) {
+      setResult(JSON.parse(stored));
     }
-
-    // Fetch leaderboard for round 1
-    fetch(getApiUrl('/api/leaderboard/?round=1'))
-      .then(r => r.json())
-      .then(data => {
-        setLeaderboard(data.slice(0, 10)); // top 10
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    setLoading(false);
   }, [navigate]);
 
   const handleContinueRound2 = async () => {
@@ -44,109 +34,110 @@ export default function Round1Results() {
     }
   };
 
-  const studentId = parseInt(localStorage.getItem('studentId'));
-
   if (loading) return <div className="r1r-loading">Loading results...</div>;
 
+  const qualified = result?.qualifies_for_round2;
+  const percentage = result?.percentage ?? 0;
+  const score = result?.round1_score ?? 0;
+  const maxScore = result?.max_possible_score ?? 0;
+
   return (
-    <div className="r1r-container">
+    <div className="r1r-page">
+
       {/* Header */}
       <div className="r1r-header">
-        <h1>🏆 Round 1 Results</h1>
+        <h1>Round 1 Results</h1>
         <p className="r1r-subtitle">CODEVERSE 2K25 — Code Debugging Challenge</p>
       </div>
 
-      {/* Score Card */}
       {result && (
-        <div className={`r1r-scorecard ${result.qualifies_for_round2 ? 'qualified' : 'not-qualified'}`}>
-          <div className="r1r-score-main">
-            <div className="r1r-score-value">{result.round1_score}</div>
-            <div className="r1r-score-label">Your Score</div>
+        <div className="r1r-card-wrap">
+
+          {/* Status banner */}
+          <div className={`r1r-status-banner ${qualified ? 'r1r-status-banner--qualified' : 'r1r-status-banner--eliminated'}`}>
+            <span className="r1r-status-icon">{qualified ? '🎉' : '❌'}</span>
+            <span className="r1r-status-text">
+              {qualified ? 'Congratulations! You are Qualified for Round 2!' : 'You are Eliminated'}
+            </span>
           </div>
-          <div className="r1r-score-details">
-            <div className="r1r-detail">
-              <span className="r1r-detail-label">Your Rank</span>
-              <span className="r1r-detail-value">#{result.rank}</span>
+
+          {/* Score card */}
+          <div className={`r1r-scorecard ${qualified ? 'r1r-scorecard--qualified' : 'r1r-scorecard--eliminated'}`}>
+
+            {/* Big score display */}
+            <div className="r1r-score-display">
+              <div className="r1r-score-number">{score}</div>
+              <div className="r1r-score-outof">out of {maxScore}</div>
             </div>
-            <div className="r1r-detail">
-              <span className="r1r-detail-label">Total Participants</span>
-              <span className="r1r-detail-value">{result.total_participants}</span>
+
+            {/* Progress bar */}
+            <div className="r1r-progress-wrap">
+              <div className="r1r-progress-bar">
+                <div
+                  className={`r1r-progress-fill ${qualified ? 'r1r-progress-fill--qualified' : 'r1r-progress-fill--eliminated'}`}
+                  style={{ width: `${Math.min(percentage, 100)}%` }}
+                />
+                {/* 50% marker */}
+                <div className="r1r-cutoff-marker">
+                  <div className="r1r-cutoff-line" />
+                  <span className="r1r-cutoff-label">50%</span>
+                </div>
+              </div>
+              <div className="r1r-percentage-row">
+                <span className="r1r-percentage-value">{percentage}%</span>
+                <span className="r1r-percentage-note">
+                  {qualified ? 'Above qualification threshold' : 'Below 50% qualification threshold'}
+                </span>
+              </div>
             </div>
-            <div className="r1r-detail">
-              <span className="r1r-detail-label">Cutoff Score</span>
-              <span className="r1r-detail-value">{result.cutoff_score}</span>
+
+            {/* Stats row */}
+            <div className="r1r-stats-row">
+              <div className="r1r-stat">
+                <span className="r1r-stat-label">Your Score</span>
+                <span className="r1r-stat-value">{score}</span>
+              </div>
+              <div className="r1r-stat-divider" />
+              <div className="r1r-stat">
+                <span className="r1r-stat-label">Max Score</span>
+                <span className="r1r-stat-value">{maxScore}</span>
+              </div>
+              <div className="r1r-stat-divider" />
+              <div className="r1r-stat">
+                <span className="r1r-stat-label">Percentage</span>
+                <span className="r1r-stat-value">{percentage}%</span>
+              </div>
+              <div className="r1r-stat-divider" />
+              <div className="r1r-stat">
+                <span className="r1r-stat-label">Status</span>
+                <span className={`r1r-stat-value ${qualified ? 'r1r-stat-value--green' : 'r1r-stat-value--red'}`}>
+                  {qualified ? 'Qualified' : 'Eliminated'}
+                </span>
+              </div>
             </div>
           </div>
 
-          {result.qualifies_for_round2 ? (
-            <div className="r1r-qualify-badge">
-              <span className="r1r-badge-icon">🎉</span>
-              <span>Congratulations! You qualify for Round 2!</span>
-            </div>
-          ) : (
-            <div className="r1r-eliminated-badge">
-              <span className="r1r-badge-icon">😔</span>
-              <span>Thank you for participating! You did not qualify for Round 2.</span>
-            </div>
-          )}
+          {/* Threshold info box */}
+          <div className="r1r-info-box">
+            <span className="r1r-info-icon">ℹ️</span>
+            <span>Students who score <strong>50% or above</strong> ({Math.ceil(maxScore * 0.5)} / {maxScore} points) qualify for Round 2.</span>
+          </div>
+
+          {/* Action button */}
+          <div className="r1r-actions">
+            {qualified ? (
+              <button className="r1r-btn r1r-btn--continue" onClick={handleContinueRound2}>
+                🚀 Continue to Round 2
+              </button>
+            ) : (
+              <button className="r1r-btn r1r-btn--finish" onClick={() => navigate('/thank-you')}>
+                View Final Results
+              </button>
+            )}
+          </div>
+
         </div>
       )}
-
-      {/* Leaderboard */}
-      <div className="r1r-leaderboard">
-        <h2>📊 Round 1 Top 10</h2>
-        <div className="r1r-table-wrapper">
-          <table className="r1r-table">
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Name</th>
-                <th>College</th>
-                <th>Score</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaderboard.map((s, idx) => (
-                <tr
-                  key={s.id}
-                  className={s.id === studentId ? 'r1r-my-row' : ''}
-                >
-                  <td>
-                    {idx === 0 && '🥇'}
-                    {idx === 1 && '🥈'}
-                    {idx === 2 && '🥉'}
-                    {idx > 2 && `#${idx + 1}`}
-                  </td>
-                  <td>{s.name} {s.id === studentId && <span className="r1r-you">(You)</span>}</td>
-                  <td>{s.college}</td>
-                  <td className="r1r-score-cell">{s.round1_score}</td>
-                  <td>
-                    {s.round2_qualified
-                      ? <span className="r1r-tag qualified">✅ Qualified</span>
-                      : <span className="r1r-tag eliminated">❌ Eliminated</span>
-                    }
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="r1r-actions">
-        {result?.qualifies_for_round2 ? (
-          <button className="r1r-btn-round2" onClick={handleContinueRound2}>
-            🚀 Continue to Round 2
-          </button>
-        ) : (
-          <button className="r1r-btn-finish" onClick={() => navigate('/thank-you')}>
-            Finish — Go to Results
-          </button>
-        )}
-      </div>
     </div>
   );
 }
-

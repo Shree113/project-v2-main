@@ -11,10 +11,6 @@ function Quiz() {
   const [answer, setAnswer] = useState('');
   const [timer, setTimer] = useState(120);
   const [progress, setProgress] = useState(5);
-  const [code, setCode] = useState('');
-  const [language, setLanguage] = useState('python');
-  const [output, setOutput] = useState('');
-  const [isCompiling, setIsCompiling] = useState(false);
 
   // Security State
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
@@ -123,12 +119,6 @@ function Quiz() {
       return false;
     };
     const preventKeyboardShortcuts = (e) => {
-      // Allow all shortcuts inside the compiler editor and answer textarea
-      if (
-        e.target.classList.contains('code-editor') ||
-        e.target.classList.contains('answer-textarea')
-      ) return;
-
       const blocked =
         (e.ctrlKey && ['c', 'a', 'v', 'x', 'u', 's', 'p'].includes(e.key.toLowerCase())) ||
         e.key === 'PrintScreen' ||
@@ -157,7 +147,7 @@ function Quiz() {
     };
   }, [triggerWarning]);
 
-  // ── 4. FETCH RANDOMIZED QUESTIONS (backend already shuffles) ───────────────
+  // ── 4. FETCH RANDOMIZED QUESTIONS ──────────────────────────────────────────
   useEffect(() => {
     const studentId = localStorage.getItem('studentId');
     if (!studentId) {
@@ -188,7 +178,6 @@ function Quiz() {
     const studentId = localStorage.getItem('studentId');
     const question = questions[currentIndex];
 
-    // Submit current answer to backend (Round 1)
     if (answer) {
       try {
         await fetch(getApiUrl('/api/submit-answer/'), {
@@ -207,7 +196,6 @@ function Quiz() {
     }
 
     if (currentIndex + 1 >= questions.length) {
-      // Round 1 complete — call backend to get qualification result
       try {
         const res = await fetch(getApiUrl('/api/complete-round1/'), {
           method: 'POST',
@@ -240,39 +228,6 @@ function Quiz() {
     }, 1000);
     return () => clearInterval(interval);
   }, [timer, handleSubmit]);
-
-  // ── COMPILER ────────────────────────────────────────────────────────────────
-  const handleCodeChange = (e) => setCode(e.target.value);
-
-  const handleLanguageChange = (e) => {
-    setLanguage(e.target.value);
-    if (e.target.value === 'c') {
-      setCode('#include <stdio.h>\n\nint main() {\n    // Your code here\n    printf("Hello, World!\\n");\n    return 0;\n}');
-    } else if (e.target.value === 'python') {
-      setCode('# Your code here\nprint("Hello, World!")');
-    } else if (e.target.value === 'java') {
-      setCode('public class Main {\n    public static void main(String[] args) {\n        // Your code here\n        System.out.println("Hello, World!");\n    }\n}');
-    }
-  };
-
-  const compileAndRun = async () => {
-    setIsCompiling(true);
-    setOutput('Compiling and running...');
-    try {
-      const response = await fetch(getApiUrl('/api/compile/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, language }),
-      });
-      if (!response.ok) throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      const result = await response.json();
-      setOutput(result.output || 'No output');
-    } catch (error) {
-      setOutput(`Error: ${error.message}`);
-    } finally {
-      setIsCompiling(false);
-    }
-  };
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
   if (!questions.length) {
@@ -382,38 +337,6 @@ function Quiz() {
         </div>
       </div>
 
-      {/* Online Compiler */}
-      <div className="compiler-section">
-        <h3>Online Code Compiler</h3>
-        <div className="compiler-controls">
-          <select value={language} onChange={handleLanguageChange} className="language-selector">
-            <option value="python">Python</option>
-            <option value="java">Java</option>
-            <option value="c">C</option>
-          </select>
-          <button className="run-btn" onClick={compileAndRun} disabled={isCompiling}>
-            {isCompiling ? 'Running...' : 'Run Code'}
-          </button>
-        </div>
-        <div className="code-editor-container">
-          <textarea
-            className="code-editor"
-            value={code}
-            onChange={handleCodeChange}
-            placeholder="Write your code here..."
-            spellCheck="false"
-            onCopy={(e) => e.stopPropagation()}
-            onCut={(e) => e.stopPropagation()}
-            onPaste={(e) => e.stopPropagation()}
-            style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
-          ></textarea>
-        </div>
-        <div className="output-container">
-          <div className="output-header">Output:</div>
-          <pre className="output">{output}</pre>
-        </div>
-      </div>
-
       <button
         className="submit-btn"
         onClick={handleSubmit}
@@ -425,4 +348,3 @@ function Quiz() {
 }
 
 export default Quiz;
-

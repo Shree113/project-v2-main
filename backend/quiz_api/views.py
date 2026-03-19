@@ -68,11 +68,6 @@ def delete_student(request, pk):
 
 @api_view(['GET'])
 def get_questions(request):
-    """
-    Return randomized questions for a specific round.
-    ?round=1  →  Round 1 MCQ questions
-    ?round=2  →  Round 2 Code Debugging questions
-    """
     import random
     round_number = int(request.query_params.get('round', 1))
     questions = list(Question.objects.filter(round_number=round_number))
@@ -83,10 +78,6 @@ def get_questions(request):
 
 @api_view(['GET'])
 def list_questions_admin(request):
-    """
-    Admin: Return all questions, optionally filtered by round.
-    ?round=1 or ?round=2 (or omit for all)
-    """
     round_filter = request.query_params.get('round')
     if round_filter:
         questions = Question.objects.filter(round_number=int(round_filter)).order_by('id')
@@ -98,12 +89,57 @@ def list_questions_admin(request):
 
 @api_view(['POST'])
 def create_question(request):
-    """
-    Admin: Create a new question.
-    Body fields: text, code_snippet, option_a, option_b, option_c, option_d,
-                 correct_option, round_number, points
-    """
-    serializer = QuestionSerializer(data=request.data)
+    data = request.data.copy()
+    round_number = int(data.get('round_number', 1))
+
+    if round_number == 1:
+        required = ['text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_option']
+        missing = [f for f in required if not str(data.get(f, '')).strip()]
+        if missing:
+            return Response(
+                {'error': f'Missing required fields for Round 1: {", ".join(missing)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if str(data.get('correct_option', '')).upper() not in ('A', 'B', 'C', 'D'):
+            return Response({'error': 'correct_option must be A, B, C, or D.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Force 10 points per Round 1 question
+        data['points']       = 10
+        data['difficulty']   = 'Medium'
+        data['examples']     = ''
+        data['constraints']  = ''
+        data['test_cases']   = []
+
+    elif round_number == 2:
+        required_str = ['text', 'difficulty', 'examples', 'constraints']
+        missing = [f for f in required_str if not str(data.get(f, '')).strip()]
+        if missing:
+            return Response(
+                {'error': f'Missing required fields for Round 2: {", ".join(missing)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        test_cases = data.get('test_cases', [])
+        if not isinstance(test_cases, list) or len(test_cases) == 0:
+            return Response({'error': 'test_cases must be a non-empty JSON array for Round 2.'}, status=status.HTTP_400_BAD_REQUEST)
+        for i, tc in enumerate(test_cases):
+            if not isinstance(tc, dict) or 'input' not in tc or 'expected_output' not in tc:
+                return Response(
+                    {'error': f'test_cases[{i}] must have "input" and "expected_output" keys.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Force 20 points per Round 2 question
+        data['points']        = 20
+        data['option_a']      = ''
+        data['option_b']      = ''
+        data['option_c']      = ''
+        data['option_d']      = ''
+        data['correct_option'] = ''
+
+    else:
+        return Response({'error': 'round_number must be 1 or 2.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    serializer = QuestionSerializer(data=data)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -112,7 +148,6 @@ def create_question(request):
 
 @api_view(['DELETE'])
 def delete_question(request, pk):
-    """Admin: Delete a question by ID."""
     try:
         question = Question.objects.get(pk=pk)
         question.delete()
@@ -125,14 +160,13 @@ def delete_question(request, pk):
 
 @api_view(['POST'])
 def submit_answer(request):
-    """Submit an answer for a question in any round."""
-    student_id = request.data.get('student_id')
-    question_id = request.data.get('question_id')
+    student_id    = request.data.get('student_id')
+    question_id   = request.data.get('question_id')
     chosen_option = request.data.get('chosen_option', '')
     submitted_code = request.data.get('submitted_code', '')
-    round_number = int(request.data.get('round_number', 1))
+    round_number  = int(request.data.get('round_number', 1))
 
-    student = get_object_or_404(Student, id=student_id)
+    student  = get_object_or_404(Student, id=student_id)
     question = get_object_or_404(Question, id=question_id)
 
     is_correct = False
@@ -156,7 +190,6 @@ def submit_answer(request):
         }
     )
 
-    # Only add score on first submission (not re-submissions)
     if is_correct and created:
         points = question.points
         if round_number == 1:
@@ -178,11 +211,6 @@ def submit_answer(request):
 
 @api_view(['POST'])
 def complete_round1(request):
-    """
-    Mark Round 1 as complete for a student.
-    Checks if they qualify for Round 2 (top 50% by score).
-    Returns qualification status and leaderboard position.
-    """
     student_id = request.data.get('student_id')
     if not student_id:
         return Response({"error": "Missing student_id"}, status=status.HTTP_400_BAD_REQUEST)
@@ -192,29 +220,33 @@ def complete_round1(request):
     except Student.DoesNotExist:
         return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Mark round 1 done
     student.round1_completed = True
-    student.round1_end_time = timezone.now()
-    student.current_round = 1
+    student.round1_end_time  = timezone.now()
+    student.current_round    = 1
     student.save()
 
-    # Check qualification: top 50% of all students who completed round 1
-    all_r1_students = Student.objects.filter(round1_completed=True).order_by('-round1_score')
-    total = all_r1_students.count()
-    cutoff = max(1, total // 2)  # at least 1 qualifies
-    qualified_ids = list(all_r1_students[:cutoff].values_list('id', flat=True))
+    # ── Qualification logic: student must score >= 50% of total Round 1 marks ──
+    # Total possible = number of Round 1 questions × 10 points each
+    total_r1_questions = Question.objects.filter(round_number=1).count()
+    max_possible_score = total_r1_questions * 10
 
-    qualifies = student.id in qualified_ids
+    if max_possible_score > 0:
+        percentage = (student.round1_score / max_possible_score) * 100
+    else:
+        percentage = 0
 
-    # Find rank
-    rank = list(all_r1_students.values_list('id', flat=True)).index(student.id) + 1
+    qualifies = percentage >= 50
+
+    if qualifies:
+        student.round2_qualified = True
+        student.save()
 
     return Response({
-        'round1_score': student.round1_score,
-        'rank': rank,
-        'total_participants': total,
+        'round1_score':         student.round1_score,
+        'max_possible_score':   max_possible_score,
+        'percentage':           round(percentage, 1),
         'qualifies_for_round2': qualifies,
-        'cutoff_score': all_r1_students[cutoff - 1].round1_score if total > 0 else 0,
+        'status':               'qualified' if qualifies else 'eliminated',
     }, status=status.HTTP_200_OK)
 
 
@@ -222,17 +254,17 @@ def complete_round1(request):
 
 @api_view(['POST'])
 def start_round2(request):
-    """Mark student as qualified and starting Round 2."""
     student_id = request.data.get('student_id')
     try:
         student = Student.objects.get(id=student_id)
     except Student.DoesNotExist:
         return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    student.round2_qualified = True
+    if not student.round2_qualified:
+        return Response({"error": "Student is not qualified for Round 2."}, status=status.HTTP_403_FORBIDDEN)
+
     student.current_round = 2
     student.save()
-
     return Response({"message": "Round 2 started", "student_id": student.id}, status=status.HTTP_200_OK)
 
 
@@ -240,7 +272,6 @@ def start_round2(request):
 
 @api_view(['POST'])
 def complete_round2(request):
-    """Mark Round 2 as complete and send result email."""
     student_id = request.data.get('student_id')
     try:
         student = Student.objects.get(id=student_id)
@@ -248,10 +279,9 @@ def complete_round2(request):
         return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
 
     student.round2_completed = True
-    student.current_round = 2
+    student.current_round    = 2
     student.save()
 
-    # Send result email
     subject = "CODEVERSE 2K25 - Your Results"
     message = (
         f"Hello {student.name},\n\n"
@@ -269,19 +299,19 @@ def complete_round2(request):
         logger.error(f"Email failed for {student.email}: {e}")
 
     return Response({
-        "message": "Round 2 completed!",
+        "message":      "Round 2 completed!",
         "round1_score": student.round1_score,
         "round2_score": student.round2_score,
-        "total_score": student.total_score,
+        "total_score":  student.total_score,
     }, status=status.HTTP_200_OK)
 
 
-# ── COMPLETE QUIZ (legacy single-round) ───────────────────────────────────────
+# ── COMPLETE QUIZ (legacy) ────────────────────────────────────────────────────
 
 @api_view(['POST'])
 def complete_quiz(request):
     student_id = request.data.get('student_id')
-    score = request.data.get('score')
+    score      = request.data.get('score')
     if not student_id or score is None:
         return Response({"error": "Missing student_id or score"}, status=status.HTTP_400_BAD_REQUEST)
     try:
@@ -297,10 +327,6 @@ def complete_quiz(request):
 
 @api_view(['GET'])
 def leaderboard(request):
-    """
-    Leaderboard — optional ?round=1 or ?round=2 to filter by round score.
-    Default returns overall total_score ranking.
-    """
     round_filter = request.query_params.get('round')
     if round_filter == '1':
         students = Student.objects.filter(round1_completed=True).order_by('-round1_score')
@@ -308,7 +334,6 @@ def leaderboard(request):
         students = Student.objects.filter(round2_completed=True).order_by('-round2_score')
     else:
         students = Student.objects.all().order_by('-total_score')
-
     serializer = StudentSerializer(students, many=True)
     return Response(serializer.data)
 
@@ -317,26 +342,24 @@ def leaderboard(request):
 
 @api_view(['GET'])
 def check_qualification(request, student_id):
-    """Check if a student qualifies for Round 2."""
     try:
         student = Student.objects.get(id=student_id)
     except Student.DoesNotExist:
         return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    all_r1 = Student.objects.filter(round1_completed=True).order_by('-round1_score')
-    total = all_r1.count()
-    cutoff = max(1, total // 2)
-    qualified_ids = list(all_r1[:cutoff].values_list('id', flat=True))
-    qualifies = student.id in qualified_ids
+    total_r1_questions = Question.objects.filter(round_number=1).count()
+    max_possible_score = total_r1_questions * 10
+    percentage = (student.round1_score / max_possible_score * 100) if max_possible_score > 0 else 0
 
     return Response({
-        "student_id": student.id,
-        "round1_score": student.round1_score,
-        "round1_completed": student.round1_completed,
-        "qualifies_for_round2": qualifies,
-        "round2_qualified": student.round2_qualified,
-        "round2_completed": student.round2_completed,
-        "current_round": student.current_round,
+        "student_id":           student.id,
+        "round1_score":         student.round1_score,
+        "max_possible_score":   max_possible_score,
+        "percentage":           round(percentage, 1),
+        "round1_completed":     student.round1_completed,
+        "qualifies_for_round2": student.round2_qualified,
+        "round2_completed":     student.round2_completed,
+        "current_round":        student.current_round,
     })
 
 
@@ -348,7 +371,7 @@ import re
 import shutil
 
 _MAX_CODE_BYTES = 10 * 1024
-_EXEC_TIMEOUT = 10
+_EXEC_TIMEOUT   = 10
 
 _PYTHON_BLACKLIST = [
     'import os', 'import sys', 'import subprocess', 'import shutil',
@@ -376,7 +399,6 @@ def _find_tool(cmd: str):
         pass
     except Exception:
         return cmd
-
     search_dirs = (
         _glob.glob(r'C:\Program Files\Microsoft\jdk-*\bin') +
         _glob.glob(r'C:\Program Files\Eclipse Adoptium\jdk-*\bin') +
@@ -451,8 +473,7 @@ def run_code(file_path, language, code=None, input_data=None):
                 if compile_result.returncode != 0:
                     return "Compilation Error:\n" + _sanitize_path(compile_result.stderr)
                 result = subprocess.run(
-                    [java_path, '-cp', java_dir, class_name],
-                    **kwargs
+                    [java_path, '-cp', java_dir, class_name], **kwargs
                 )
             finally:
                 shutil.rmtree(java_dir, ignore_errors=True)
@@ -472,8 +493,8 @@ def run_code(file_path, language, code=None, input_data=None):
 
 @api_view(['POST'])
 def compile_code(request):
-    code = request.data.get('code', '').strip()
-    language = request.data.get('language', 'python').strip().lower()
+    code       = request.data.get('code', '').strip()
+    language   = request.data.get('language', 'python').strip().lower()
     input_data = request.data.get('input', '')
 
     if not code:
