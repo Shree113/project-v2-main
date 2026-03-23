@@ -1,4 +1,3 @@
-
 "use client";
 import React from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,7 +14,9 @@ function Instructions() {
   return (
     <main className="container">
       <div className="contentWrapper">
-        <h1 className="title">CODEVERSE 2K25</h1>
+        <h1 className="title">code 144p 2K25</h1>
+
+        {/* ── Participant Info ── */}
         <section className="formContainer">
           <h2 className="formTitle">Participant Information</h2>
           <form className="formFields">
@@ -36,66 +37,37 @@ function Instructions() {
               <input className="formInput" value={studentData?.email || ''} readOnly />
             </div>
             <div className="formGroup">
-              <label className="formLabel">DEPARTMENT</label>
+              <label className="formLabel">DEPARTMENT:</label>
               <input className="formInput" value={studentData?.department || ''} readOnly />
             </div>
           </form>
         </section>
 
+        {/* ── Rules ── */}
         <header className="instructionsHeader">
           <h2 className="instructionsTitle">Instructions</h2>
-          <span className="instructionsTime">60 minutes</span>
+          <span className="instructionsTime">Read carefully</span>
         </header>
 
         <section className="instructionsList">
-          <p className="instructionItem">1. You will face 20 challenging problems divided into 4 categories: syntax debugging, logic debugging, missing code elements, and efficiency optimization</p>
-          <p className="instructionItem">2. For each missing code elements question, you must identify what's missing (variables, loops, conditions, etc.) and select the correct implementation</p>
-          <p className="instructionItem">3. Each question has a time limit of 2 min after this time, the challenge automatically advances to the next question</p>
-          <p className="instructionItem">4. Each correct answer earns you 5 points. There is no negative marking for wrong answers</p>
-          <p className="instructionItem">5. The entire challenge must be completed within 60min, your timer will be displayed at the top of your screen</p>
-          <p className="instructionItem">6. For "Missing Code Elements" problems, look for missing variables, function parameters, loop conditions or return statements that would make the code work</p>
-          <p className="instructionItem" style={{color:"#dc2626",fontWeight:"600"}}>7. 🔒 The exam runs in FULLSCREEN mode. Exiting fullscreen will pause your exam until you return.</p>
-          <p className="instructionItem" style={{color:"#dc2626",fontWeight:"600"}}>8. 🔒 Tab/window switching is monitored. After 3 violations your exam will be auto-submitted.</p>
-          <p className="instructionItem" style={{color:"#dc2626",fontWeight:"600"}}>9. 🔒 Copying, right-clicking, and shortcuts like Ctrl+C are disabled during the exam.</p>
-          <p className="instructionItem" style={{color:"#dc2626",fontWeight:"600"}}>10. 🔒 Questions and answer options are randomized for every participant.</p>
+          <p className="instructionItem">1. You compete as an individual — teams are not permitted under any circumstances.</p>
+          <p className="instructionItem">2. Round 1 has a strict <strong>2-minute timer per question</strong>. When it expires the quiz automatically moves to the next question with no recovery.</p>
+          <p className="instructionItem">3. Round 2 has a <strong>5-minute timer per question</strong> and a <strong>25-minute total session timer</strong>. Whichever expires first ends that question.</p>
+          <p className="instructionItem">4. Questions and answer options are <strong>randomised independently</strong> for every participant — sharing answers with others is ineffective and a violation.</p>
+          <p className="instructionItem">5. Each correct answer in Round 1 earns <strong>5 points</strong> (max 75). Each correct answer in Round 2 earns <strong>25 points</strong> (max 125). There is no negative marking.</p>
+          <p className="instructionItem">6. You must score at least <strong>38 out of 75 (50%)</strong> in Round 1 to qualify for Round 2. Once Round 1 is submitted it cannot be retaken.</p>
+          <p className="instructionItem">7. If you qualified but did not attempt Round 2, your Round 2 score is treated as 0 in the final ranking.</p>
+          <p className="instructionItem">8. Results are emailed automatically to your registered address upon completing Round 2.</p>
+          <p className="instructionItem" style={{ color: "#dc2626", fontWeight: "600" }}>9. 🔒 The exam runs in <strong>FULLSCREEN mode</strong>. Exiting fullscreen pauses your exam until you click Re-enter Fullscreen.</p>
+          <p className="instructionItem" style={{ color: "#dc2626", fontWeight: "600" }}>10. 🔒 <strong>Tab / window switching is monitored</strong>. Each switch triggers a warning. After <strong>3 violations your exam is auto-submitted immediately</strong> with no recovery.</p>
+          <p className="instructionItem" style={{ color: "#dc2626", fontWeight: "600" }}>11. 🔒 <strong>Copy, paste, and right-click are disabled</strong> on all question and answer areas. Ctrl+C, Ctrl+V, and Ctrl+X are blocked throughout the exam.</p>
+          <p className="instructionItem" style={{ color: "#dc2626", fontWeight: "600" }}>12. 🔒 <strong>Keyboard shortcuts are blocked</strong> — Ctrl+A, Ctrl+S, Ctrl+P, and Print Screen are all disabled during the exam.</p>
+          <p className="instructionItem" style={{ color: "#dc2626", fontWeight: "600" }}>13. 🔒 Organisers reserve the right to <strong>disqualify</strong> any participant found using external assistance or breaching exam integrity.</p>
         </section>
 
-        <h2 className="challengeTypesHeader">Challenge Types</h2>
-        <div className="challengeTypesGrid">
-          <article className="challengeType">
-            <header className="challengeTypeHeader">
-              <div className="challengeTypeDot"></div>
-              <h3 className="challengeTypeTitle">Syntax Debugging</h3>
-            </header>
-            <p className="challengeTypeDescription">Find and fix syntax errors in code snippets across different programming languages</p>
-          </article>
-
-          <article className="challengeType">
-            <header className="challengeTypeHeader">
-              <div className="challengeTypeDot"></div>
-              <h3 className="challengeTypeTitle">Logic Debugging</h3>
-            </header>
-            <p className="challengeTypeDescription">Identify logical errors that cause incorrect results or unexpected behavior</p>
-          </article>
-
-          <article className="challengeType">
-            <header className="challengeTypeHeader">
-              <div className="challengeTypeDot"></div>
-              <h3 className="challengeTypeTitle">Missing Code Elements</h3>
-            </header>
-            <p className="challengeTypeDescription">Find the missing pieces of code needed to complete a function or algorithm</p>
-          </article>
-
-          <article className="challengeType">
-            <header className="challengeTypeHeader">
-              <div className="challengeTypeDot"></div>
-              <h3 className="challengeTypeTitle">Efficiency Optimization</h3>
-            </header>
-            <p className="challengeTypeDescription">Improve inefficient code by optimizing algorithms or data structures</p>
-          </article>
-        </div>
-
-        <button onClick={handleStart} className="startButton">Continue to Round 1</button>
+        <button onClick={handleStart} className="startButton">
+          Continue to Round 1
+        </button>
       </div>
     </main>
   );

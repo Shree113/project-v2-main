@@ -49,7 +49,7 @@ export default function Round1Results() {
       {/* Header */}
       <div className="r1r-header">
         <h1>Round 1 Results</h1>
-        <p className="r1r-subtitle">CODEVERSE 2K25 — Code Debugging Challenge</p>
+        <p className="r1r-subtitle">code 144p 2K25 — Code Debugging Challenge</p>
       </div>
 
       {result && (

@@ -42,16 +42,16 @@ def _check_rate_limit(request, key_suffix, limit, window):
 
 
 def _send_result_email(student):
-    subject = "CODEVERSE 2K25 - Your Results"
+    subject = "code 144p 2K25 - Your Results"
     message = (
         f"Hello {student.name},\n\n"
-        f"Thank you for participating in CODEVERSE 2K25!\n\n"
+        f"Thank you for participating in code 144p 2K25!\n\n"
         f"Your Results:\n"
         f"  Round 1 Score : {student.round1_score}\n"
         f"  Round 2 Score : {student.round2_score}\n"
         f"  Total Score   : {student.total_score}\n\n"
         f"Results will be announced shortly.\n\n"
-        f"Best regards,\nCODEVERSE Team"
+        f"Best regards,\ncode 144p Team"
     )
     try:
         send_mail(subject, message, settings.EMAIL_HOST_USER, [student.email])

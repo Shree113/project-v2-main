@@ -9,14 +9,14 @@ export default function Round1Instructions() {
     <main className="r1i-container">
       <div className="r1i-wrapper">
         <div className="r1i-badge">🏁 Ready for Round 1</div>
-        <h1 className="r1i-title">CODEVERSE 2K25 — Round 1</h1>
+        <h1 className="r1i-title">code 144p 2K25 — Round 1</h1>
         <h2 className="r1i-subtitle">MCQ Code Debugging Challenge</h2>
 
         {/* Instructions */}
         <section className="r1i-instructions">
           <h3>📋 Round 1 Instructions</h3>
           <ul>
-            <li>🕐 You have <strong>2 minutes per question</strong> (20 questions total)</li>
+            <li>🕐 You have <strong>2 minutes per question</strong> (15 questions total)</li>
             <li>🐛 Categories include <strong>syntax debugging, logic debugging, missing code, and efficiency</strong></li>
             <li>✅ Each correct answer earns <strong>5 points</strong></li>
             <li>❌ There is <strong>no negative marking</strong></li>

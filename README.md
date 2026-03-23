@@ -1,173 +1,152 @@
-# CODEVERSE Quiz Platform
+# 🚀 code 144p Quiz Platform
 
-A full-stack, two-round competitive coding quiz application built for the **VAHGFINIX'26** event. Students register, attempt a timed MCQ round, and top performers advance to a code debugging round — all in a secure, proctored browser environment.
+![React](https://img.shields.io/badge/React-18-blue.svg?style=for-the-badge&logo=react)
+![Django](https://img.shields.io/badge/Django-4.2-darkgreen.svg?style=for-the-badge&logo=django)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Ready-blue.svg?style=for-the-badge&logo=postgresql)
+![Docker](https://img.shields.io/badge/Docker-Supported-2496ED.svg?style=for-the-badge&logo=docker)
+
+A full-stack, two-round competitive coding quiz application built originally for the **VAHGFINIX'26** event. Students register, attempt a timed MCQ round, and top performers automatically advance to a code debugging round — all running within a secure, proctored browser environment.
 
 ---
 
-## Table of Contents
+## 📑 Table of Contents
 
-- [Overview](#overview)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Features](#features)
-- [Getting Started](#getting-started)
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [Tech Stack](#-tech-stack)
+- [Project Structure](#-project-structure)
+- [Getting Started](#-getting-started)
   - [Prerequisites](#prerequisites)
-  - [Running with Docker Compose](#running-with-docker-compose)
-  - [Running Locally (without Docker)](#running-locally-without-docker)
-- [Environment Variables](#environment-variables)
-- [API Reference](#api-reference)
-- [Deployment](#deployment)
-- [Admin Panel](#admin-panel)
+  - [Docker Installation](#running-with-docker-compose)
+  - [Local Installation](#running-locally-without-docker)
+- [Environment Variables](#-environment-variables)
+- [API Reference](#-api-reference)
+- [Deployment](#-deployment)
+- [License](#-license)
 
 ---
 
-## Overview
+## 🎯 Overview
 
-CODEVERSE is a competitive quiz platform designed for college-level coding events. It supports:
+**code 144p** is a robust and highly-customizable competitive quiz platform tailored explicitly for college-level coding events and hackathons. It automates testing, evaluation, and progression.
 
-- **Round 1** — Timed multiple-choice questions (MCQ) with anti-cheating measures
-- **Round 2** — Code debugging questions for students who qualify (top 50% by score)
-- **Live leaderboard** — Rankings by round score or total score
-- **Online compiler** — Built-in code editor supporting Python, Java, and C
-- **Admin dashboard** — Create, manage, and delete questions per round
+- **Round 1:** Timed multiple-choice questions (MCQ) fortified with anti-cheating mechanisms.
+- **Round 2:** High-stakes code debugging questions available only to qualified students (e.g., top 50%).
+- **Live Leaderboard:** Real-time ranking based on Round 1, Round 2, and aggregate scores.
+- **Integrated Compiler:** Browser-based code editor and compiler execution environment for Python, Java, and C.
+- **Admin Dashboard:** Fully equipped management portal to handle questions, track users, and monitor exams.
 
 ---
 
-## Tech Stack
+## ✨ Key Features
 
-| Layer | Technology |
+### 👨‍🎓 Student Flow
+1. **Welcome Dashboard** ➔ **Registration** ➔ **Instructions** ➔ **Round 1 (MCQ)** ➔ **Results** ➔ *(if qualified)* ➔ **Round 2 (Debugging)** ➔ **Thank You**
+
+### 🛡️ Secure Round 1 (MCQ)
+- Questions are randomized per student to prevent collaboration.
+- Individual per-question countdown timers (e.g., 2 minutes).
+- **Proctoring Suite:**
+  - Enforced fullscreen mode with warnings.
+  - Tab switch & window blur detection (auto-submits after 3 strikes).
+  - Copy/paste and right-click functions disabled.
+  - Dedicated keyboard shortcut blocking.
+
+### 💻 Round 2 (Code Debugging)
+- Unlocked exclusively for students scoring past the qualification threshold.
+- Embedded IDE environment for modifying and testing buggy code.
+- Automatic email dispatching with final detailed results upon completion.
+
+### ⚙️ Online Compiler & Execution Engine
+- Safely executes user code directly on the server.
+- Supports **Python 3**, **Java**, and **C (gcc)**.
+- Input size limits (10 KB) & timeouts (10s) prevent infinite loops.
+- Python sandbox securely filters dangerous imports (`os`, `sys`, `subprocess`).
+
+---
+
+## 🛠️ Tech Stack
+
+| Component | Technologies Used |
 |---|---|
-| Frontend | React 18, React Router v6, Vite |
-| Backend | Django 4.2, Django REST Framework |
-| Database | PostgreSQL (production), SQLite (local dev) |
-| Server | Gunicorn + WhiteNoise |
-| Containerization | Docker, Docker Compose |
-| Deployment | Render (backend + frontend), Vercel (frontend alt) |
+| **Frontend** | React 18, React Router v6, Vite, Vanilla CSS |
+| **Backend** | Django 4.2, Django REST Framework (DRF) |
+| **Database** | PostgreSQL (Production), SQLite (Local Dev) |
+| **Server** | Gunicorn + WhiteNoise |
+| **Containerization** | Docker, Docker Compose |
+| **Hosting Deployment** | Render (Full Stack), Vercel (Frontend Alternative) |
 
 ---
 
-## Project Structure
+## 📂 Project Structure
 
-```
-project-v2/
+```text
+project-v2-main/
 ├── backend/
-│   ├── quiz_api/               # Core Django app
-│   │   ├── models.py           # Student, Question, StudentAnswer, Leaderboard
-│   │   ├── views.py            # All API endpoints + code compiler
-│   │   ├── serializers.py      # DRF serializers
-│   │   ├── admin.py            # Django admin config
-│   │   └── migrations/         # Database migrations
-│   ├── quiz_backend/           # Django project settings & URL routing
+│   ├── quiz_api/               # Core Django app logic & APIs
+│   │   ├── models.py           # DB Schemas: Student, Question, Answer
+│   │   ├── views.py            # API logic and online compiler engine
+│   │   └── serializers.py      # DRF JSON transformers
+│   ├── quiz_backend/           # Django project configuration (settings.py)
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── Procfile
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx             # Route definitions
-│   │   └── pages/
-│   │       ├── Welcome.jsx
-│   │       ├── StudentEntry.jsx
-│   │       ├── Instructions.jsx
-│   │       ├── Quiz.jsx             # Round 1 (MCQ + compiler)
-│   │       ├── Round1Results.jsx
-│   │       ├── Round2Instructions.jsx
-│   │       ├── Round2.jsx           # Round 2 (code debugging)
-│   │       ├── ThankYou.jsx
-│   │       ├── AdminQuestions.jsx   # Admin question manager
-│   │       ├── Header.jsx
-│   │       └── Footer.jsx
+│   │   ├── App.jsx             # React routing architecture
+│   │   └── pages/              # UI Components (Quiz, Leaderboard, etc.)
 │   ├── Dockerfile
 │   ├── nginx.conf
 │   └── vite.config.js
-├── docker-compose.yml
-└── render.yaml
+├── docker-compose.yml          # Unified container orchestration
+└── render.yaml                 # Render auto-deployment manifest
 ```
 
 ---
 
-## Features
-
-### Student Flow
-1. **Welcome** → **Student Registration** → **Instructions** → **Round 1 Quiz** → **Results** → (if qualified) **Round 2** → **Thank You**
-
-### Round 1 — MCQ Quiz
-- Randomized questions served from the backend
-- Per-question countdown timer (2 minutes each)
-- Anti-cheating suite:
-  - Forced fullscreen mode with re-entry prompt
-  - Tab switch detection (3-strike auto-submit)
-  - Window blur detection
-  - Copy/paste and right-click disabled
-  - Keyboard shortcut blocking
-- Built-in code compiler (Python, Java, C) available alongside questions
-
-### Round 2 — Code Debugging
-- Available only to students who scored in the top 50% of Round 1
-- Code debugging questions with configurable point values
-- Same compiler and security measures as Round 1
-- Result email sent automatically on completion
-
-### Admin
-- Superuser login with token-based auth
-- Add / delete questions per round
-- View all students and leaderboard
-
-### Code Compiler
-- Supports Python 3, Java, C (gcc)
-- Input size limit: 10 KB
-- Execution timeout: 10 seconds
-- Python sandbox: blocks dangerous imports (`os`, `sys`, `subprocess`, `socket`, etc.)
-- Path sanitization in error output
-
----
-
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
-
-- [Docker](https://www.docker.com/) and Docker Compose
-- OR: Python 3.10+, Node.js 18+, and PostgreSQL
+- [Docker](https://www.docker.com/) & Docker Compose **OR**
+- Python 3.10+, Node.js 18+, and PostgreSQL (for local manual builds).
 
 ### Running with Docker Compose
+The fastest way to get everything running is via Docker.
 
 ```bash
-# Clone the repo
-git clone https://github.com/Sameerr06/project-v2.git
-cd project-v2
+# 1. Clone the repository
+git clone https://github.com/YourRepo/code144p.git
+cd code144p
 
-# Copy and configure environment variables
-cp .env.example .env   # edit as needed
+# 2. Configure environments
+cp .env.example .env
 
-# Build and start all services
+# 3. Spin up the containers
 docker-compose up --build
 ```
+- **Frontend Dashboard:** `http://localhost`
+- **Backend API API:** `http://localhost:8000`
+- **Django Superadmin:** `http://localhost:8000/admin` *(Default: admin / admin123)*
 
-Services will be available at:
-- Frontend: http://localhost
-- Backend API: http://localhost:8000
-- Django Admin: http://localhost:8000/admin
-
-Default admin credentials (created automatically): `admin` / `admin123`
-
-To stop and remove containers:
+To stop the service and clear database volumes:
 ```bash
-docker-compose down        # stop containers
-docker-compose down -v     # also remove database volume
+docker-compose down -v
 ```
 
-### Running Locally (without Docker)
+### Running Locally (Without Docker)
 
-**Backend:**
+**1. Backend Initialization:**
 ```bash
 cd backend
-python -m venv venv && source venv/bin/activate
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
 
-**Frontend:**
+**2. Frontend Initialization:**
 ```bash
 cd frontend
 npm install
@@ -176,92 +155,64 @@ npm run dev
 
 ---
 
-## Environment Variables
+## 🔐 Environment Variables
+
+Ensure these are properly set in your respective `.env` files for production.
 
 ### Backend (`backend/.env`)
-
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `DJANGO_SECRET_KEY` | Django secret key |
-| `DEBUG` | `True` for development, `False` for production |
-| `ALLOWED_HOSTS` | Comma-separated list of allowed hosts |
-| `EMAIL_HOST_USER` | Gmail address for result emails |
-| `EMAIL_HOST_PASSWORD` | Gmail app password |
+| `DATABASE_URL` | PostgreSQL connection string URL |
+| `DJANGO_SECRET_KEY` | 50-character random cryptic string |
+| `DEBUG` | `True` for Dev, `False` for Production |
+| `ALLOWED_HOSTS` | Comma-separated list (e.g., `api.example.com`) |
+| `EMAIL_HOST_USER` | Gmail address for sending result emails |
+| `EMAIL_HOST_PASSWORD` | App-specific password for the Gmail account |
 
 ### Frontend (`frontend/.env`)
-
 | Variable | Description |
 |---|---|
-| `VITE_API_URL` | Base URL of the backend API |
+| `VITE_API_URL` | FQDN to your backend server |
 
 ---
 
-## API Reference
+## 📡 API Reference
 
-### Student
+### Student Management
+- `POST /api/student/` - Register new participant
+- `DELETE /api/delete-student/<id>/` - Remove participant
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/student/` | Register a new student |
-| DELETE | `/api/delete-student/<id>/` | Delete a student |
+### Quiz Operations
+- `GET /api/questions/?round=X` - Retrieve active questions
+- `POST /api/submit-answer/` - Lodge an answer/code snippet
+- `POST /api/complete-round1/` - Finalize round & calculate qualification
+- `GET /api/check-qualification/<id>/` - Verify R2 eligibility
+- `POST /api/start-round2/` - Initiate final stage
+- `POST /api/complete-round2/` - Finalize quiz & dispatch email
 
-### Questions
+### Admin Control
+- `GET /api/admin/questions/` - List full question repository
+- `POST /api/admin/questions/create/` - Insert new questions
+- `DELETE /api/admin/questions/delete/<id>/` - Remove question
+- `GET /api/leaderboard/` - Comprehensive rankings page
+- `POST /api/login/` - Token auth for staff
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/questions/?round=1` | Get randomized questions for a round |
-| GET | `/api/admin/questions/` | List all questions (admin) |
-| POST | `/api/admin/questions/create/` | Create a question (admin) |
-| DELETE | `/api/admin/questions/delete/<id>/` | Delete a question (admin) |
-
-### Quiz Flow
-
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/submit-answer/` | Submit an answer |
-| POST | `/api/complete-round1/` | Finish Round 1, get qualification result |
-| GET | `/api/check-qualification/<student_id>/` | Check Round 2 eligibility |
-| POST | `/api/start-round2/` | Mark student as starting Round 2 |
-| POST | `/api/complete-round2/` | Finish Round 2, triggers result email |
-
-### Other
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/leaderboard/` | Overall leaderboard (optional `?round=1` or `?round=2`) |
-| POST | `/api/login/` | Admin superuser login |
-| POST | `/api/compile/` | Run code (Python/Java/C) |
+### Code Execution
+- `POST /api/compile/` - Run arbitrary code *(Requires auth & validation)*
 
 ---
 
-## Deployment
+## ☁️ Deployment
 
-The project is pre-configured for deployment on **Render** via `render.yaml`:
+This repository is optimized for **Render** via the included `render.yaml`.
+1. Fork & Clone into your GitHub account.
+2. Link your repository directly into Render.
+3. Render will auto-provision the **Backend API**, **PostgreSQL Database**, and serve the **React Frontend** over CDN.
 
-- **Backend**: Docker-based web service connected to a free PostgreSQL instance
-- **Frontend**: Static site built with `npm run build`, served via Render's CDN with React Router rewrites
-
-To deploy:
-1. Push to GitHub
-2. Connect the repo to Render
-3. Render auto-detects `render.yaml` and provisions both services
-
-The frontend is also deployable to **Vercel** — a `vercel.json` config is included in the `frontend/` directory.
+You may alternatively deploy the database to **Supabase** or **AWS RDS**, and host the frontend on **Vercel** utilizing the `vercel.json` config.
 
 ---
 
-## Admin Panel
+## ⚖️ License
 
-Access the Django admin at `/admin/` with your superuser credentials to:
-- View and manage students
-- Browse submitted answers
-- View the leaderboard proxy model (sorted by total score)
-
-The custom **AdminQuestions** page at `/admin/questions` (frontend) provides a simpler interface for managing quiz questions without needing the Django admin UI.
-
----
-
-## License
-
-This project was built for CODEVERSE 2K25. All rights reserved.
+Built for **code 144p 2K25**. All rights reserved. 

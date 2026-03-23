@@ -10,7 +10,7 @@ export default function Round2Instructions() {
     <main className="r2i-container">
       <div className="r2i-wrapper">
         <div className="r2i-badge">🏆 Round 2 Qualified</div>
-        <h1 className="r2i-title">CODEVERSE 2K25 — Round 2</h1>
+        <h1 className="r2i-title">code 144p 2K25 — Round 2</h1>
         <h2 className="r2i-subtitle">Code Debugging Challenge</h2>
 
         {/* Participant Info */}
@@ -30,7 +30,7 @@ export default function Round2Instructions() {
           <ul>
             <li>🕐 You have <strong>25 minutes</strong> to complete Round 2</li>
             <li>🐛 Each question contains a <strong>buggy code snippet</strong> — identify and select the correct fix</li>
-            <li>✅ Each correct answer earns <strong>20 points</strong></li>
+            <li>✅ Each correct answer earns <strong>25 points</strong></li>
             <li>⏱️ Each question has a <strong>5-minute</strong> time limit before auto-advancing</li>
             <li>💻 Use the built-in compiler to <strong>test and verify</strong> your fixes</li>
             <li>🔒 Fullscreen mode is enforced — exiting will trigger a warning</li>

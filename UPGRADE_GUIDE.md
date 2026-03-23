@@ -1,4 +1,4 @@
-# CODEVERSE 2K25 Upgrade Guide
+# code 144p 2K25 Upgrade Guide
 
 ## 1. Frontend Architectural Changes
 - **API Centralization**: Replaced scattered `fetch` calls with a clean, typed Axios instance configured in `services/api.js`. Added interceptors for automatic token injection and 401 redirection.

@@ -1,130 +1,350 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { quizApi, compilerApi, questionsApi } from "../services/api";
-import "./Quiz.css";
 import "./Round2.css";
 
 const ROUND2_TOTAL_SECONDS = 25 * 60;
 const QUESTION_TIME = 5 * 60;
 const MAX_TAB_SWITCHES = 3;
 
+const STARTER_TEMPLATES = {
+  python: (snippet) => snippet || "# Fix the bug and write your solution here\n\n",
+  java: (snippet) => {
+    if (snippet) return snippet;
+    return `import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here\n    }\n}`;
+  },
+  c: (snippet) =>
+    snippet ||
+    `#include <stdio.h>\n\nint main() {\n    // Write your solution here\n    return 0;\n}`,
+};
+
+function fmtTime(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/**
+ * Normalize output for comparison.
+ * - Normalize line endings
+ * - Trim trailing whitespace per line
+ * - Trim leading/trailing blank lines
+ */
+function normalizeOutput(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trim();
+}
+
+/** Returns true if output looks like a compile/runtime error, not program output */
+function looksLikeCompileError(output) {
+  if (!output) return false;
+  const lower = output.toLowerCase();
+  return (
+    lower.includes("compilation error") ||
+    lower.includes("syntaxerror") ||
+    lower.includes("syntax error") ||
+    (lower.includes("error:") && (lower.includes("\n") || lower.startsWith("error:")))
+  );
+}
+
+function looksLikeRuntimeError(output) {
+  if (!output) return false;
+  const lower = output.toLowerCase();
+  return (
+    lower.includes("traceback (most recent call last)") ||
+    lower.includes("nameerror") ||
+    lower.includes("typeerror") ||
+    lower.includes("valueerror") ||
+    lower.includes("zerodivisionerror") ||
+    lower.includes("indexerror") ||
+    lower.includes("attributeerror") ||
+    lower.includes("runtimeerror") ||
+    lower.includes("exception in thread") ||
+    lower.includes("segmentation fault") ||
+    lower.startsWith("error (exit code")
+  );
+}
+
+function LineNumbers({ code }) {
+  const count = (code || "").split("\n").length;
+  return (
+    <div className="r2-line-numbers">
+      {Array.from({ length: Math.max(count, 1) }, (_, i) => (
+        <span key={i + 1}>{i + 1}</span>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TestCasePanel
+// ─────────────────────────────────────────────────────────────────────────────
+function TestCasePanel({ testResults, output, isCompiling, activeTab, setActiveTab, testCases, runError }) {
+  const passedCount = testResults ? testResults.filter((r) => r.passed).length : 0;
+  const totalCount = testResults ? testResults.length : 0;
+  const allPassed = totalCount > 0 && passedCount === totalCount;
+
+  return (
+    <div className="r2-test-section">
+      <div className="r2-test-tabs-bar">
+        <button className={`r2-test-tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>
+          <span className="r2-tab-icon">⚡</span>
+          Test Results
+          {testResults && (
+            <span className={`r2-tab-badge ${allPassed ? "badge-pass" : "badge-fail"}`}>
+              {passedCount}/{totalCount}
+            </span>
+          )}
+        </button>
+        <button className={`r2-test-tab ${activeTab === "console" ? "active" : ""}`} onClick={() => setActiveTab("console")}>
+          <span className="r2-tab-icon">🖥</span>
+          Console
+        </button>
+        <button className={`r2-test-tab ${activeTab === "cases" ? "active" : ""}`} onClick={() => setActiveTab("cases")}>
+          <span className="r2-tab-icon">📋</span>
+          Test Cases ({testCases?.length || 0})
+        </button>
+        {allPassed && (
+          <div className="r2-all-pass-badge"><span>✓</span> All Passed</div>
+        )}
+      </div>
+
+      <div className="r2-test-body">
+
+        {/* ── RESULTS ── */}
+        {activeTab === "tests" && (
+          <div className="r2-test-results-list">
+            {isCompiling && (
+              <div className="r2-running-indicator">
+                <div className="r2-pulse-dot" />
+                <span>Compiling and running against test cases…</span>
+              </div>
+            )}
+            {!isCompiling && runError && (
+              <div className="r2-compile-error-box">
+                <div className="r2-compile-error-title">⚠ Compilation / Syntax Error</div>
+                <pre className="r2-compile-error-body">{runError}</pre>
+                <div className="r2-compile-error-hint">Fix the error above, then click Run Tests again.</div>
+              </div>
+            )}
+            {!isCompiling && !runError && !testResults && (
+              <div className="r2-empty-state">
+                <div className="r2-empty-icon">▶</div>
+                <p>Click <strong>Run Tests</strong> to compile your code and run it against each test case automatically.</p>
+              </div>
+            )}
+            {!isCompiling && !runError && testResults &&
+              testResults.map((tr, i) => (
+                <div key={i} className={`r2-tc-card ${tr.passed ? "r2-tc-pass" : "r2-tc-fail"}`}>
+                  <div className="r2-tc-header">
+                    <div className="r2-tc-title">
+                      <span className="r2-tc-num">Test {i + 1}</span>
+                      <span className={`r2-tc-verdict ${tr.passed ? "verdict-pass" : "verdict-fail"}`}>
+                        {tr.passed ? "✓ PASSED" : "✗ FAILED"}
+                      </span>
+                      {tr.isError && <span className="r2-tc-error-tag">Runtime Error</span>}
+                    </div>
+                    {!tr.passed && !tr.isError && <span className="r2-tc-diff-hint">Output mismatch</span>}
+                  </div>
+                  <div className="r2-tc-grid">
+                    <div className="r2-tc-field">
+                      <span className="r2-tc-label">stdin Input</span>
+                      <pre className="r2-tc-pre r2-tc-input">
+                        {tr.input !== "" && tr.input !== undefined ? tr.input : "(no input)"}
+                      </pre>
+                    </div>
+                    <div className="r2-tc-field">
+                      <span className="r2-tc-label">Expected Output</span>
+                      <pre className="r2-tc-pre r2-tc-expected">{tr.expected}</pre>
+                    </div>
+                    <div className="r2-tc-field r2-tc-full">
+                      <span className="r2-tc-label">
+                        Your Output
+                        {tr.passed
+                          ? <span className="r2-tc-match"> ✓ matches expected</span>
+                          : <span className="r2-tc-mismatch">{tr.isError ? " ⚠ program error" : " ✗ differs from expected"}</span>
+                        }
+                      </span>
+                      <pre className={`r2-tc-pre ${tr.passed ? "r2-tc-actual-pass" : tr.isError ? "r2-tc-actual-error" : "r2-tc-actual-fail"}`}>
+                        {tr.rawActual || "(no output)"}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+
+        {/* ── CONSOLE ── */}
+        {activeTab === "console" && (
+          <div className="r2-console-wrap">
+            <div className="r2-console-header">
+              <span className="r2-console-label">stdout / stderr</span>
+              <span className="r2-console-hint">
+                {isCompiling ? "Running…" : output ? "last run" : "no output yet"}
+              </span>
+            </div>
+            <pre className="r2-console-output">
+              {isCompiling
+                ? "Running your code…"
+                : output || "No output yet.\nUse ▷ Run or ▶ Run Tests to see output here."}
+            </pre>
+          </div>
+        )}
+
+        {/* ── TEST CASES PREVIEW ── */}
+        {activeTab === "cases" && (
+          <div className="r2-testcases-preview">
+            {!testCases || testCases.length === 0 ? (
+              <div className="r2-empty-state"><p>No test cases defined for this question.</p></div>
+            ) : (
+              testCases.map((tc, i) => (
+                <div key={i} className="r2-tc-preview-card">
+                  <div className="r2-tc-preview-header">Test Case {i + 1}</div>
+                  <div className="r2-tc-preview-row">
+                    <span>stdin Input:</span>
+                    <pre>{tc.input !== "" && tc.input !== undefined ? tc.input : "(no input)"}</pre>
+                  </div>
+                  <div className="r2-tc-preview-row">
+                    <span>Expected Output:</span>
+                    <pre>{tc.expected_output}</pre>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═════════════════════════════════════════════════════════════════════════════
 function Round2() {
   const navigate = useNavigate();
+
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [questionTimer, setQuestionTimer] = useState(QUESTION_TIME);
   const [totalTimer, setTotalTimer] = useState(ROUND2_TOTAL_SECONDS);
-  const [code, setCode] = useState('');
-  const [language, setLanguage] = useState('python');
-  const [output, setOutput] = useState('');
-  const [testResults, setTestResults] = useState(null); // null means not run yet
-  const [activeTab, setActiveTab] = useState('tests');
+  const [code, setCode] = useState("");
+  const [language, setLanguage] = useState("python");
+  const [output, setOutput] = useState("");
+  const [testResults, setTestResults] = useState(null);
+  const [runError, setRunError] = useState(null);
+  const [activeTab, setActiveTab] = useState("tests");
   const [isCompiling, setIsCompiling] = useState(false);
-  
-  // Security state
+  const [customInput, setCustomInput] = useState("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [score, setScore] = useState(0);
+
+  // Security
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
-  const [warningMessage, setWarningMessage] = useState('');
+  const [warningMessage, setWarningMessage] = useState("");
   const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
   const warningTimerRef = useRef(null);
-  
-  // Refs
-  const submittingRef = useRef(false);
+
+  // ── FIX: separate ref for finishing so it doesn't conflict with handleNext's submittingRef
+  const finishingRef = useRef(false); // guards finishRound2 from double-call
+  const submittingRef = useRef(false); // guards handleNext from double-click
+
   const qRef = useRef([]);
   const idxRef = useRef(0);
-  const codeRef = useRef('');
+  const codeRef = useRef("");
   const testRef = useRef(null);
-  
+  const langRef = useRef("python");
+  const editorRef = useRef(null);
+
   useEffect(() => { qRef.current = questions; }, [questions]);
   useEffect(() => { idxRef.current = currentIndex; }, [currentIndex]);
   useEffect(() => { codeRef.current = code; }, [code]);
   useEffect(() => { testRef.current = testResults; }, [testResults]);
+  useEffect(() => { langRef.current = language; }, [language]);
 
-  // Draft Autosave
+  // Draft autosave per question+language every 10s
   useEffect(() => {
-    const draftInterval = setInterval(() => {
+    const iv = setInterval(() => {
       if (codeRef.current) {
-        localStorage.setItem('r2_draft_code', codeRef.current);
+        localStorage.setItem(`r2_draft_q${idxRef.current}_${langRef.current}`, codeRef.current);
       }
     }, 10000);
-    return () => clearInterval(draftInterval);
+    return () => clearInterval(iv);
   }, []);
 
-  const getStarterCode = (lang, snippet) => {
-    if (snippet) return snippet;
-    if (lang === 'c') return '#include <stdio.h>\n\nint main() {\n    return 0;\n}';
-    if (lang === 'python') return '# Fix the bug here\n';
-    if (lang === 'java') return 'public class Main {\n    public static void main(String[] args) {\n    }\n}';
-    return '';
-  };
-
-  const loadQuestionState = (qIdx) => {
-    const qs = qRef.current;
-    if (!qs || !qs[qIdx]) return;
-    const q = qs[qIdx];
-    
-    // First load logic for the entire round or new question
-    const draft = localStorage.getItem('r2_draft_code');
-    if (qIdx === idxRef.current && draft) {
-      setCode(draft);
-    } else {
-      setCode(getStarterCode(language, q.code_snippet));
-    }
-    setTestResults(null);
-    setOutput('');
-  };
-
-  // ── FULLSCREEN ──────────────────────────────────────────────────────────────
+  // ── FULLSCREEN ─────────────────────────────────────────────────────────────
   const enterFullscreen = useCallback(() => {
     const el = document.documentElement;
-    if (el.requestFullscreen) el.requestFullscreen();
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => { });
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   }, []);
 
   const handleFullscreenChange = useCallback(() => {
-    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
-    setShowFullscreenPrompt(!fsEl);
+    const inFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    setShowFullscreenPrompt(!inFS);
   }, []);
 
   useEffect(() => {
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
     enterFullscreen();
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
     };
   }, [enterFullscreen, handleFullscreenChange]);
 
-  // ── TAB SWITCH ──────────────────────────────────────────────────────────────
+  // ── WARNING HELPER ─────────────────────────────────────────────────────────
   const triggerWarning = useCallback((msg) => {
     setWarningMessage(msg);
     setShowWarning(true);
-    if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+    clearTimeout(warningTimerRef.current);
     warningTimerRef.current = setTimeout(() => setShowWarning(false), 4000);
   }, []);
 
+  // ── FINISH ROUND 2 ─────────────────────────────────────────────────────────
+  // FIX: uses finishingRef (not submittingRef) so it doesn't conflict with handleNext
   const finishRound2 = useCallback(async () => {
-    const studentId = localStorage.getItem('studentId');
-    const token = localStorage.getItem('studentToken');
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+
+    const studentId = localStorage.getItem("studentId");
+    const token = localStorage.getItem("studentToken");
     try {
       const data = await quizApi.completeRound2(studentId, token);
-      localStorage.setItem('round2Result', JSON.stringify(data));
-      localStorage.removeItem('r2_draft_code');
+      localStorage.setItem("round2Result", JSON.stringify(data));
     } catch (err) {
-      console.error(err);
+      console.error("completeRound2 error:", err);
     }
-    navigate('/thank-you', { replace: true });
+    // Clean all drafts
+    for (let i = 0; i < 20; i++) {
+      ["python", "java", "c"].forEach((l) =>
+        localStorage.removeItem(`r2_draft_q${i}_${l}`)
+      );
+    }
+    navigate("/thank-you", { replace: true });
   }, [navigate]);
 
+  // ── TAB-SWITCH DETECTION ───────────────────────────────────────────────────
   const handleVisibilityChange = useCallback(() => {
     if (document.hidden) {
-      setTabSwitchCount(prev => {
+      setTabSwitchCount((prev) => {
         const n = prev + 1;
         if (n >= MAX_TAB_SWITCHES) {
           finishRound2();
         } else {
-          triggerWarning(`⚠️ Tab switch! Warning ${n}/${MAX_TAB_SWITCHES}.`);
+          triggerWarning(
+            `⚠️ Tab switch detected! Warning ${n}/${MAX_TAB_SWITCHES} — ${MAX_TAB_SWITCHES - n} more will auto-submit.`
+          );
         }
         return n;
       });
@@ -132,344 +352,530 @@ function Round2() {
   }, [triggerWarning, finishRound2]);
 
   useEffect(() => {
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearTimeout(warningTimerRef.current);
     };
   }, [handleVisibilityChange]);
 
-  // ── ANTI-CHEAT ──────────────────────────────────────────────────────────────
+  // ── ANTI-CHEAT ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const preventCopy = (e) => { e.preventDefault(); triggerWarning('🚫 Copying is not allowed.'); };
-    const preventCtx = (e) => e.preventDefault();
-    const preventShortcuts = (e) => {
-      if (e.target.classList.contains('code-editor') || e.target.classList.contains('answer-textarea')) return;
-      const blocked = (e.ctrlKey && ['c','a','v','x','u','s','p'].includes(e.key.toLowerCase())) || e.key === 'PrintScreen';
-      if (blocked) { e.preventDefault(); triggerWarning('🚫 Keyboard shortcut disabled.'); }
+    const preventCopy = (e) => {
+      if (e.target.closest(".r2-editor-area")) return;
+      e.preventDefault();
+      triggerWarning("🚫 Copying is not allowed during the exam.");
     };
-    document.addEventListener('copy', preventCopy);
-    document.addEventListener('contextmenu', preventCtx);
-    document.addEventListener('keydown', preventShortcuts);
+    const preventCtx = (e) => { if (!e.target.closest(".r2-editor-area")) e.preventDefault(); };
+    const preventKeys = (e) => {
+      if (e.target.closest(".r2-editor-area")) return;
+      if ((e.ctrlKey || e.metaKey) && ["c", "a", "v", "x", "u", "s", "p"].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+        triggerWarning("🚫 Keyboard shortcuts are disabled.");
+      }
+    };
+    document.addEventListener("copy", preventCopy);
+    document.addEventListener("contextmenu", preventCtx);
+    document.addEventListener("keydown", preventKeys);
     return () => {
-      document.removeEventListener('copy', preventCopy);
-      document.removeEventListener('contextmenu', preventCtx);
-      document.removeEventListener('keydown', preventShortcuts);
+      document.removeEventListener("copy", preventCopy);
+      document.removeEventListener("contextmenu", preventCtx);
+      document.removeEventListener("keydown", preventKeys);
     };
   }, [triggerWarning]);
 
-  // ── FETCH QUESTIONS ─────────────────────────────────────────────────────────
+  // ── FETCH QUESTIONS ────────────────────────────────────────────────────────
   useEffect(() => {
-    const studentId = localStorage.getItem('studentId');
-    if (!studentId) { navigate('/'); return; }
-
-    const fetchQuestions = async () => {
+    const studentId = localStorage.getItem("studentId");
+    if (!studentId) { navigate("/"); return; }
+    (async () => {
       try {
         const data = await questionsApi.listStudent(2);
         if (Array.isArray(data) && data.length > 0) {
           setQuestions(data);
-          // Load init
-          setTimeout(() => {
-             const draft = localStorage.getItem('r2_draft_code');
-             if (draft) { setCode(draft); }
-             else { setCode(getStarterCode('python', data[0].code_snippet)); }
-          }, 0);
+          const draft = localStorage.getItem("r2_draft_q0_python");
+          setCode(draft || STARTER_TEMPLATES.python(data[0].code_snippet));
         }
       } catch (err) {
-        console.error(err);
+        console.error("Failed to fetch questions:", err);
       }
-    };
-    fetchQuestions();
+    })();
   }, [navigate]);
 
-  // ── HANDLE NEXT ─────────────────────────────────────────────────────────────
-  const handleNext = useCallback(async () => {
+  // ── TAB KEY → 4 spaces ────────────────────────────────────────────────────
+  const handleEditorKeyDown = (e) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const el = e.target;
+      const s = el.selectionStart;
+      const end = el.selectionEnd;
+      const v = el.value.substring(0, s) + "    " + el.value.substring(end);
+      setCode(v);
+      requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = s + 4; });
+    }
+  };
+
+  // ── ADVANCE / SUBMIT QUESTION ──────────────────────────────────────────────
+  // FIX: reset submittingRef properly; call finishRound2 only for last question
+  const handleNext = useCallback(async (forced = false) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
 
     const qs = qRef.current;
     const cIdx = idxRef.current;
-    const currentCode = codeRef.current;
-    const tr = testRef.current || [];
-    const allPassed = tr.length > 0 && tr.every(r => r.passed);
+    if (!qs.length) { submittingRef.current = false; return; }
 
-    if (qs.length === 0) {
-      submittingRef.current = false;
-      return;
-    }
-
-    const studentId = localStorage.getItem('studentId');
-    const token = localStorage.getItem('studentToken');
+    const studentId = localStorage.getItem("studentId");
+    const token = localStorage.getItem("studentToken");
     const question = qs[cIdx];
+    const tr = testRef.current || [];
+    const allPassed = tr.length > 0 && tr.every((r) => r.passed);
 
+    // Submit answer to backend
     try {
       await quizApi.submitAnswer({
         student_id: studentId,
-        token: token,
+        token,
         question_id: question.id,
         chosen_option: allPassed ? "CORRECT" : "WRONG",
-        submitted_code: currentCode,
+        submitted_code: codeRef.current,
+        is_correct: allPassed,
         round_number: 2,
       });
+      if (allPassed) setScore((s) => s + (question.points || 20));
     } catch (err) {
-      console.error(err);
+      console.error("submitAnswer error:", err);
     }
 
-    if (cIdx + 1 >= qs.length) {
+    // Clear draft for submitted question
+    ["python", "java", "c"].forEach((l) =>
+      localStorage.removeItem(`r2_draft_q${cIdx}_${l}`)
+    );
+
+    const isLastQuestion = cIdx + 1 >= qs.length;
+
+    if (isLastQuestion) {
+      // FIX: reset submittingRef before calling finishRound2
+      // finishRound2 has its own finishingRef guard
+      submittingRef.current = false;
       finishRound2();
     } else {
-      localStorage.removeItem('r2_draft_code');
-      setCurrentIndex(cIdx + 1);
-      
-      const nextQ = qs[cIdx + 1];
-      setCode(getStarterCode(language, nextQ.code_snippet));
+      const nextIdx = cIdx + 1;
+      const nextQ = qs[nextIdx];
+      const lang = langRef.current;
+      const draft = localStorage.getItem(`r2_draft_q${nextIdx}_${lang}`);
+      setCurrentIndex(nextIdx);
+      setCode(draft || STARTER_TEMPLATES[lang]?.(nextQ.code_snippet) || nextQ.code_snippet || "");
       setTestResults(null);
-      setOutput('');
+      setRunError(null);
+      setOutput("");
       setQuestionTimer(QUESTION_TIME);
-      
+      setActiveTab("tests");
+      // FIX: always reset after navigation so next question can be submitted
       submittingRef.current = false;
     }
-  }, [finishRound2, language]);
+  }, [finishRound2]);
 
-  // ── TIMERS ──────────────────────────────────────────────────────────────────
+  // ── TIMERS ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const tInterval = setInterval(() => {
-      setTotalTimer(prev => {
-        if (prev <= 1) { clearInterval(tInterval); finishRound2(); return 0; }
-        return prev - 1;
+    const iv = setInterval(() => {
+      setTotalTimer((p) => {
+        if (p <= 1) { clearInterval(iv); finishRound2(); return 0; }
+        return p - 1;
       });
     }, 1000);
-    return () => clearInterval(tInterval);
+    return () => clearInterval(iv);
   }, [finishRound2]);
 
   useEffect(() => {
-    const qInterval = setInterval(() => {
-      setQuestionTimer(prev => {
-        if (prev <= 1) { 
-          if (!submittingRef.current) handleNext();
-          return 0; 
+    const iv = setInterval(() => {
+      setQuestionTimer((p) => {
+        if (p <= 1) {
+          if (!submittingRef.current) handleNext(true);
+          return 0;
         }
-        return prev - 1;
+        return p - 1;
       });
     }, 1000);
-    return () => clearInterval(qInterval);
+    return () => clearInterval(iv);
   }, [handleNext]);
 
-  // ── COMPILER ────────────────────────────────────────────────────────────────
-  const handleLanguageChange = (e) => {
-    const newLang = e.target.value;
-    setLanguage(newLang);
-    setCode(getStarterCode(newLang, questions[currentIndex]?.code_snippet));
-  };
-
+  // ══════════════════════════════════════════════════════════════════════════
+  // RUN TESTS
+  // Sends each test case's `.input` as stdin to the compiler backend.
+  // The backend pipes it via subprocess.run(input=...).
+  // Output is normalized and compared with expected_output.
+  // ══════════════════════════════════════════════════════════════════════════
   const runTests = async () => {
-    setIsCompiling(true);
-    setTestResults(null);
-    setActiveTab('tests');
-    setOutput('Running tests...\n');
-    let consoleOutput = "";
-    const results = [];
-    
-    const tcCases = questions[currentIndex]?.test_cases || [];
+    if (isCompiling) return;
 
-    if (tcCases.length === 0) {
-       setOutput("No test cases. Running code normally...\n");
-       try {
-          const result = await compilerApi.run(code, language, '');
-          setOutput(result.output || 'No output');
-       } catch (err) {
-          setOutput(`Error: ${err.message}`);
-       }
-       setIsCompiling(false);
-       return;
+    const currentCode = codeRef.current.trim();
+    const currentLang = langRef.current;
+    const q = qRef.current[idxRef.current];
+    const tcCases = q?.test_cases || [];
+
+    if (!currentCode) {
+      triggerWarning("⚠ Please write some code before running tests.");
+      return;
     }
 
-    for (let i = 0; i < tcCases.length; i++) {
-        const tc = tcCases[i];
-        try {
-          const result = await compilerApi.run(code, language, tc.input);
-          const actualOutput = (result.output || '').trim();
-          const expected = (tc.expected_output || '').trim();
-          const passed = actualOutput === expected;
+    setIsCompiling(true);
+    setTestResults(null);
+    setRunError(null);
+    setOutput("");
+    setActiveTab("tests");
 
-          results.push({
-             input: tc.input,
-             expected: expected,
-             actual: actualOutput,
-             passed
-          });
-          consoleOutput += `Test Case ${i+1}:\nInput: ${tc.input}\nOutput:\n${actualOutput}\n\n`;
-        } catch (err) {
-          results.push({ input: tc.input, expected: tc.expected_output, actual: `Error: ${err.message}`, passed: false });
-          consoleOutput += `Test Case ${i+1} Error: ${err.message}\n\n`;
-        }
+    // ── Step 1: Compile probe with empty stdin to catch syntax errors ──────
+    try {
+      const probe = await compilerApi.run(currentCode, currentLang, "");
+      const probeOut = (probe.output || "").trim();
+
+      if (looksLikeCompileError(probeOut)) {
+        setRunError(probeOut);
+        setOutput(probeOut);
+        setIsCompiling(false);
+        return;
+      }
+    } catch (err) {
+      setRunError(`Network error: ${err.message}`);
+      setIsCompiling(false);
+      return;
+    }
+
+    // ── Step 2: No test cases — run with custom or empty input ─────────────
+    if (tcCases.length === 0) {
+      try {
+        const result = await compilerApi.run(currentCode, currentLang, customInput || "");
+        setOutput(result.output || "(no output)");
+        setActiveTab("console");
+      } catch (err) {
+        setOutput(`Error: ${err.message}`);
+        setActiveTab("console");
+      }
+      setIsCompiling(false);
+      return;
+    }
+
+    // ── Step 3: Run each test case piping its input as stdin ───────────────
+    const results = [];
+    let consolLog = "";
+
+    for (let i = 0; i < tcCases.length; i++) {
+      const tc = tcCases[i];
+      const stdinInput = tc.input ?? "";          // exact value from admin, passed as-is
+      const expectedRaw = tc.expected_output ?? "";
+      const expectedNorm = normalizeOutput(expectedRaw);
+
+      try {
+        const result = await compilerApi.run(currentCode, currentLang, stdinInput);
+        const rawActual = result.output || "";
+        const actualNorm = normalizeOutput(rawActual);
+        const isRTError = looksLikeRuntimeError(rawActual);
+        const passed = !isRTError && actualNorm === expectedNorm;
+
+        results.push({
+          input: stdinInput,
+          expected: expectedNorm,
+          rawActual: rawActual.trimEnd(),
+          actual: actualNorm,
+          passed,
+          isError: isRTError && !passed,
+        });
+
+        consolLog += `─── Test ${i + 1} ───────────────────\n`;
+        consolLog += `Input:\n${stdinInput || "(empty)"}\n\n`;
+        consolLog += `Output:\n${rawActual || "(no output)"}\n`;
+        consolLog += `Expected:\n${expectedRaw}\n`;
+        consolLog += `Result: ${passed ? "✓ PASSED" : "✗ FAILED"}\n\n`;
+
+      } catch (err) {
+        const errMsg = `API Error: ${err.message}`;
+        results.push({ input: stdinInput, expected: expectedNorm, rawActual: errMsg, actual: errMsg, passed: false, isError: true });
+        consolLog += `─── Test ${i + 1} ─── ERROR\n${errMsg}\n\n`;
+      }
     }
 
     setTestResults(results);
-    setOutput(consoleOutput);
+    setOutput(consolLog);
     setIsCompiling(false);
   };
 
-  const fmtTime = (secs) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  // ── RUN WITH CUSTOM INPUT ──────────────────────────────────────────────────
+  const runCustom = async () => {
+    if (isCompiling) return;
+    const currentCode = codeRef.current.trim();
+    if (!currentCode) { triggerWarning("⚠ Please write some code first."); return; }
+    setIsCompiling(true);
+    setActiveTab("console");
+    setOutput("Running…");
+    try {
+      const result = await compilerApi.run(currentCode, langRef.current, customInput);
+      setOutput(result.output || "(no output)");
+    } catch (err) {
+      setOutput(`Error: ${err.message}`);
+    }
+    setIsCompiling(false);
+  };
 
+  // ── LANGUAGE CHANGE ────────────────────────────────────────────────────────
+  const handleLanguageChange = (lang) => {
+    setLanguage(lang);
+    const q = qRef.current[idxRef.current];
+    const draft = localStorage.getItem(`r2_draft_q${idxRef.current}_${lang}`);
+    setCode(draft || STARTER_TEMPLATES[lang]?.(q?.code_snippet) || q?.code_snippet || "");
+    setTestResults(null);
+    setRunError(null);
+    setOutput("");
+  };
+
+  // ── LOADING GUARD ──────────────────────────────────────────────────────────
   if (!questions.length) {
     return (
-      <div className="loading">
-        <div className="spinner"></div>
+      <div className="r2-loading-screen">
+        <div className="r2-loading-inner">
+          <div className="r2-loader-ring" />
+          <p>Loading Round 2 questions…</p>
+        </div>
       </div>
     );
   }
 
-  const currentQuestion = questions[currentIndex];
-  let passedCount = 0;
-  let allPassed = false;
-  
-  if (testResults) {
-    passedCount = testResults.filter(r => r.passed).length;
-    allPassed = passedCount === testResults.length && testResults.length > 0;
-  }
+  const q = questions[currentIndex];
+  const tr = testResults || [];
+  const passedCount = tr.filter((r) => r.passed).length;
+  const allPassed = tr.length > 0 && passedCount === tr.length;
+  const qProgress = ((currentIndex + 1) / questions.length) * 100;
+  const totalPct = (totalTimer / ROUND2_TOTAL_SECONDS) * 100;
+  const qTimePct = (questionTimer / QUESTION_TIME) * 100;
 
   return (
-    <div className="quiz-container r2-container">
+    <div className="r2-root">
+
+      {/* FULLSCREEN OVERLAY */}
       {showFullscreenPrompt && (
-        <div className="security-overlay">
-          <div className="security-modal">
+        <div className="r2-overlay">
+          <div className="r2-overlay-modal">
+            <div className="r2-overlay-icon">⛶</div>
             <h2>Fullscreen Required</h2>
-            <button className="security-action-btn" onClick={enterFullscreen}>Re-enter Fullscreen</button>
+            <p>This exam must be taken in fullscreen. Click below to continue.</p>
+            <button className="r2-overlay-btn" onClick={enterFullscreen}>Re-enter Fullscreen</button>
           </div>
         </div>
       )}
 
+      {/* WARNING TOAST */}
       {showWarning && (
-        <div className="warning-toast">
+        <div className="r2-warning-toast">
+          <span className="r2-warning-icon">⚠</span>
           <span>{warningMessage}</span>
+          <div className="r2-warning-bar" />
         </div>
       )}
 
-      {/* TOP BAR */}
-      <div className="r2-top-bar">
-        <div className="r2-brand">🏆 CODEVERSE ROUND 2</div>
-        <div className="r2-timers-mini">
-           Total: <span className={totalTimer < 300 ? 'danger' : ''}>{fmtTime(totalTimer)}</span> | Question: <span className={questionTimer < 60 ? 'danger' : ''}>{fmtTime(questionTimer)}</span>
+      {/* VIOLATION BADGE */}
+      {tabSwitchCount > 0 && (
+        <div className={`r2-violation-badge ${tabSwitchCount >= MAX_TAB_SWITCHES - 1 ? "critical" : "warn"}`}>
+          ⚠ Violations: {tabSwitchCount}/{MAX_TAB_SWITCHES}
         </div>
-        <div className="r2-top-actions">
-           <button
-             className="skip-btn"
-             onClick={handleNext}
-             disabled={submittingRef.current || currentIndex >= questions.length - 1}
-           >
-             Skip
-           </button>
-           <button className="submit-btn r2-submit-btn" onClick={handleNext} disabled={submittingRef.current}>
-             {currentIndex === questions.length - 1 ? '🏁 Finish Exam' : 'Submit Code'}
-           </button>
+      )}
+
+      {/* NAVBAR */}
+      <header className="r2-navbar">
+        <div className="r2-navbar-left">
+          <div className="r2-navbar-brand">
+            <span className="r2-brand-icon">⚙</span>
+            <span className="r2-brand-text">code 144p </span>
+            <span className="r2-brand-round">ROUND 2</span>
+          </div>
+          <div className="r2-q-progress">
+            <div className="r2-q-progress-track">
+              <div className="r2-q-progress-fill" style={{ width: `${qProgress}%` }} />
+            </div>
+            <span className="r2-q-progress-label">{currentIndex + 1} / {questions.length}</span>
+          </div>
         </div>
-      </div>
 
-      <div className="r2-split-layout">
-         {/* LEFT PANE */}
-         <div className="r2-left-pane">
-            <div className="r2-question-header">
-               <div style={{display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
-                  <h2>{currentIndex + 1}. {currentQuestion.text}</h2>
-                  {allPassed && <span className="all-passed-badge">✓ All tests passed</span>}
-               </div>
-               <span className={`difficulty-tag difficulty-${currentQuestion.difficulty?.toLowerCase() || 'medium'}`}>
-                  {currentQuestion.difficulty || "Medium"}
-               </span>
+        <div className="r2-navbar-center">
+          <div className="r2-timer-block">
+            <span className="r2-timer-label">Total</span>
+            <span className={`r2-timer-val ${totalTimer < 300 ? "danger" : totalTimer < 600 ? "warn" : ""}`}>
+              {fmtTime(totalTimer)}
+            </span>
+            <div className="r2-timer-strip">
+              <div className="r2-timer-strip-fill total-fill" style={{ width: `${totalPct}%` }} />
             </div>
-
-            <div className="r2-question-content">
-               {currentQuestion.code_snippet && (
-                 <div className="r2-section">
-                   <h3>Problem Description</h3>
-                   <pre className="r2-pre-wrap">{currentQuestion.code_snippet}</pre>
-                 </div>
-               )}
-
-               {currentQuestion.examples && (
-                 <div className="r2-section">
-                   <h3>Examples</h3>
-                   <pre className="r2-pre-wrap r2-example-box">{currentQuestion.examples}</pre>
-                 </div>
-               )}
-
-               {currentQuestion.constraints && (
-                 <div className="r2-section">
-                   <h3>Constraints</h3>
-                   <pre className="r2-pre-wrap r2-constraint-box">{currentQuestion.constraints}</pre>
-                 </div>
-               )}
+          </div>
+          <div className="r2-timer-divider" />
+          <div className="r2-timer-block">
+            <span className="r2-timer-label">This Question</span>
+            <span className={`r2-timer-val ${questionTimer < 60 ? "danger" : questionTimer < 120 ? "warn" : ""}`}>
+              {fmtTime(questionTimer)}
+            </span>
+            <div className="r2-timer-strip">
+              <div className="r2-timer-strip-fill q-fill" style={{ width: `${qTimePct}%` }} />
             </div>
-         </div>
+          </div>
+        </div>
 
-         {/* RIGHT PANE */}
-         <div className="r2-right-pane">
-            <div className="r2-editor-section">
-               <div className="r2-editor-toolbar">
-                  <select value={language} onChange={handleLanguageChange} className="language-selector">
-                    <option value="python">Python</option>
-                    <option value="java">Java</option>
-                    <option value="c">C</option>
-                  </select>
-                  
-                  {testResults && (
-                    <span className="pass-fail-counter">
-                      {passedCount}/{testResults.length} passed
-                    </span>
-                  )}
-                  
-                  <button className="run-btn" onClick={runTests} disabled={isCompiling}>
-                    {isCompiling ? '⏳ Running...' : '▶ Run Tests'}
-                  </button>
-               </div>
-               <div className="r2-editor-wrapper">
-                 <div className="line-numbers">
-                    {code.split('\n').map((_, i) => <div key={i}>{i+1}</div>)}
-                 </div>
-                 <textarea
-                   className="code-editor r2-split-editor"
-                   value={code}
-                   onChange={(e) => setCode(e.target.value)}
-                   spellCheck="false"
-                 />
-               </div>
-            </div>
+        <div className="r2-navbar-right">
+          <div className="r2-live-score">
+            <span className="r2-live-score-label">Score</span>
+            <span className="r2-live-score-val">{score}</span>
+          </div>
+          {allPassed && (
+            <div className="r2-all-passed-chip"><span>✓</span> All Tests Pass</div>
+          )}
+          <button
+            className="r2-skip-btn"
+            onClick={() => handleNext(false)}
+            disabled={submittingRef.current || currentIndex >= questions.length - 1}
+          >
+            Skip →
+          </button>
+          <button
+            className={`r2-submit-btn ${allPassed ? "r2-submit-btn--pass" : ""}`}
+            onClick={() => handleNext(false)}
+            disabled={submittingRef.current}
+          >
+            {currentIndex === questions.length - 1 ? "🏁 Finish" : "Submit ➤"}
+          </button>
+        </div>
+      </header>
 
-            <div className="r2-test-section">
-               <div className="r2-test-tabs">
-                  <button className={`r2-tab ${activeTab === 'tests' ? 'active' : ''}`} onClick={() => setActiveTab('tests')}>Test Cases</button>
-                  <button className={`r2-tab ${activeTab === 'console' ? 'active' : ''}`} onClick={() => setActiveTab('console')}>Console Output</button>
-               </div>
-               <div className="r2-test-content">
-                  {activeTab === 'tests' ? (
-                     <div className="r2-test-results">
-                        {!testResults ? (
-                           <div className="r2-no-tests">(no output yet)</div>
-                        ) : (
-                           testResults.map((tr, idx) => (
-                              <div key={idx} className={`r2-test-case-card ${tr.passed ? 'passed' : 'failed'}`}>
-                                 <div className="tc-header">
-                                    <h4>Test Case {idx + 1}</h4>
-                                    <span className={`tc-status tc-${tr.passed ? 'pass' : 'fail'}`}>
-                                       {tr.passed ? '✅ Passed' : '❌ Failed'}
-                                    </span>
-                                 </div>
-                                 <div className="tc-body">
-                                    <div className="tc-row"><strong>Input:</strong> <pre>{tr.input}</pre></div>
-                                    <div className="tc-row"><strong>Expected:</strong> <pre>{tr.expected}</pre></div>
-                                    <div className="tc-row"><strong>Actual:</strong> <pre className={`actual-output ${tr.passed ? 'passed-text' : 'failed-text'}`}>{tr.actual}</pre></div>
-                                 </div>
-                              </div>
-                           ))
-                        )}
-                     </div>
-                  ) : (
-                     <pre className="r2-console-output">{!output && !isCompiling ? '(no output yet)' : output}</pre>
-                  )}
-               </div>
+      {/* WORKSPACE */}
+      <div className="r2-workspace">
+
+        {/* LEFT: Problem */}
+        <aside className="r2-problem-pane">
+          <div className="r2-problem-header">
+            <div className="r2-problem-meta">
+              <span className="r2-problem-num">Q{currentIndex + 1}</span>
+              <span className={`r2-diff-chip diff-${(q.difficulty || "Medium").toLowerCase()}`}>
+                {q.difficulty || "Medium"}
+              </span>
+              <span className="r2-pts-chip">{q.points || 20} pts</span>
             </div>
-         </div>
+            <h2 className="r2-problem-title">{q.text}</h2>
+          </div>
+          <div className="r2-problem-body">
+            {q.code_snippet && (
+              <div className="r2-problem-section">
+                <div className="r2-section-label"><span className="r2-section-dot dot-red" />Buggy Code to Fix</div>
+                <pre className="r2-buggy-code">{q.code_snippet}</pre>
+              </div>
+            )}
+            {q.examples && (
+              <div className="r2-problem-section">
+                <div className="r2-section-label"><span className="r2-section-dot dot-blue" />Examples</div>
+                <pre className="r2-example-block">{q.examples}</pre>
+              </div>
+            )}
+            {q.constraints && (
+              <div className="r2-problem-section">
+                <div className="r2-section-label"><span className="r2-section-dot dot-amber" />Constraints</div>
+                <pre className="r2-constraints-block">{q.constraints}</pre>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* RIGHT: Editor + Tests */}
+        <div className="r2-editor-pane">
+
+          {/* Toolbar */}
+          <div className="r2-editor-toolbar">
+            <div className="r2-lang-tabs">
+              {[
+                { id: "python", icon: "🐍", label: "Python" },
+                { id: "java", icon: "☕", label: "Java" },
+                { id: "c", icon: "⚙", label: "C" },
+              ].map(({ id, icon, label }) => (
+                <button
+                  key={id}
+                  className={`r2-lang-tab ${language === id ? "active" : ""}`}
+                  onClick={() => handleLanguageChange(id)}
+                >
+                  {icon} {label}
+                </button>
+              ))}
+            </div>
+            <div className="r2-toolbar-actions">
+              <button
+                className="r2-custom-input-toggle"
+                onClick={() => setShowCustomInput((v) => !v)}
+                title="Open a panel to enter custom stdin for the ▷ Run button"
+              >
+                {showCustomInput ? "▲ Hide Input" : "▼ Custom Input"}
+              </button>
+              <button className="r2-run-custom-btn" onClick={runCustom} disabled={isCompiling} title="Run code with your custom stdin input (no test comparison)">
+                ▷ Run
+              </button>
+              <button className="r2-run-tests-btn" onClick={runTests} disabled={isCompiling} title="Run code against all test cases automatically">
+                {isCompiling
+                  ? <><span className="r2-spin">⟳</span> Running…</>
+                  : <>▶ Run Tests ({q.test_cases?.length || 0})</>
+                }
+              </button>
+            </div>
+          </div>
+
+          {/* Custom stdin panel */}
+          {showCustomInput && (
+            <div className="r2-custom-input-area">
+              <div className="r2-custom-input-header">
+                <span className="r2-custom-input-label">stdin for ▷ Run</span>
+                {/* FIX: clear example so students don't type variable assignments */}
+                <span className="r2-custom-input-hint">
+                  Enter raw values only — e.g. if your program reads N then N numbers, type:
+                </span>
+              </div>
+              <div className="r2-custom-input-example">
+                <code>5</code>
+                <code>3</code>
+                <code>1</code>
+                <code>4</code>
+                <code>1</code>
+                <code>5</code>
+                <span className="r2-example-caption">← one value per line, no variable names</span>
+              </div>
+              <textarea
+                className="r2-custom-input-field"
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                placeholder={"5\n3\n1\n4\n1\n5"}
+                rows={4}
+                spellCheck={false}
+              />
+            </div>
+          )}
+
+          {/* Code editor */}
+          <div className="r2-editor-area r2-editor-wrap">
+            <LineNumbers code={code} />
+            <textarea
+              ref={editorRef}
+              className="r2-code-editor"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={handleEditorKeyDown}
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
+            />
+          </div>
+
+          {/* Test results panel */}
+          <TestCasePanel
+            testResults={testResults}
+            output={output}
+            isCompiling={isCompiling}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            testCases={q.test_cases}
+            runError={runError}
+          />
+        </div>
       </div>
     </div>
   );

@@ -81,7 +81,7 @@ export default function StudentEntry() {
     <div className="student-entry-wrapper">
       <div className="left-panel">
         <div className="badge">College Event</div>
-        <h1>Codeverse Quiz</h1>
+        <h1>code 144p Quiz</h1>
         <ul className="feature-list">
           <li>Interactive multiple choice questions</li>
           <li>Live code debugging playground</li>
