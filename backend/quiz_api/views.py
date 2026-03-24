@@ -658,27 +658,40 @@ def run_code(file_path, language, code=None, input_data=None):
             kwargs["input"] = input_data.replace('\r\n', '\n')
 
         if language == 'python':
-            # ── For Python, we prioritize Remote Execution (Piston/Wandbox) ──
-            # This is because local execution on Render often has stdin pipe issues.
+            # ── For Python on Render, we MUST use Remote Execution ──
+            # Local execution fails to handle stdin correctly in this environment.
+            
+            # 1. Try Piston (Fastest & most reliable for Python)
             remote_output = _run_piston(language, code_str, input_data)
+            if not remote_output.startswith("Remote"):
+                return remote_output
             
-            # If Piston failed or returned an execution error, try Wandbox
-            if "Error" in remote_output or "failed" in remote_output:
-                remote_output = _run_wandbox(language, code_str, input_data or '')
+            # 2. Try Wandbox (Backup)
+            remote_output = _run_wandbox(language, code_str, input_data or '')
+            if not remote_output.startswith("Remote"):
+                return remote_output
             
-            # If both remote options failed, only then attempt local execution
-            if "Error" in remote_output or "Connection" in remote_output:
-                try:
-                    import sys
-                    result = subprocess.run([sys.executable, file_path], **kwargs)
-                    output = result.stdout
-                    if result.returncode != 0:
-                        output += f"\nError (exit code {result.returncode}):\n" + _sanitize_path(result.stderr)
-                    return output
-                except Exception as _e:
-                    return remote_output # Return the remote error if local also fails
-            
-            return remote_output
+            # 3. Last resort (Local) - only if remote services are literally unreachable
+            try:
+                import sys
+                # Ensure input has a trailing newline to prevent some EOF issues
+                local_input = (input_data or "")
+                if local_input and not local_input.endswith('\n'):
+                    local_input += '\n'
+                
+                result = subprocess.run(
+                    [sys.executable, file_path], 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=_EXEC_TIMEOUT,
+                    input=local_input
+                )
+                output = result.stdout
+                if result.returncode != 0:
+                    output += f"\nError (exit code {result.returncode}):\n" + _sanitize_path(result.stderr)
+                return output or "Execution completed (No output)"
+            except Exception as _e:
+                return "Error: All execution engines (Piston, Wandbox, Local) are currently unavailable."
 
         elif language == 'c':
             gcc_path = _find_tool('gcc')
