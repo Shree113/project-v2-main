@@ -17,6 +17,8 @@ from django.shortcuts import get_object_or_404
 from django.core.cache import cache
 from rest_framework.pagination import PageNumberPagination
 import json
+import requests
+import time
 
 from .models import Student, Question, StudentAnswer
 from .serializers import StudentSerializer, QuestionSerializer, StudentAnswerSerializer
@@ -384,16 +386,24 @@ def complete_quiz(request):
 def leaderboard(request):
     round_filter = request.query_params.get('round')
     if round_filter == '1':
-        students = Student.objects.filter(round1_completed=True).order_by('-round1_score')
+        students = Student.objects.filter(round1_completed=True).order_by('-round1_score', 'id')
     elif round_filter == '2':
-        students = Student.objects.filter(round2_completed=True).order_by('-round2_score')
+        students = Student.objects.filter(round2_completed=True).order_by('-round2_score', 'id')
     else:
-        students = Student.objects.all().order_by('-total_score')
-        
+        students = Student.objects.all().order_by('-total_score', '-round2_score', 'id')
+
     paginator = LeaderboardPagination()
     paginated_students = paginator.paginate_queryset(students, request)
+
+    # Compute global rank offset so rank is correct across pages
+    offset = (paginator.page.start_index() - 1) if hasattr(paginator, 'page') and paginator.page else 0
+
     serializer = StudentSerializer(paginated_students, many=True)
-    return paginator.get_paginated_response(serializer.data)
+    data = list(serializer.data)
+    for i, item in enumerate(data):
+        item['rank'] = offset + i + 1
+
+    return paginator.get_paginated_response(data)
 
 
 # ── CHECK QUALIFICATION ───────────────────────────────────────────────────────
@@ -469,17 +479,24 @@ def _sanitize_path(text: str) -> str:
 def _find_tool(cmd: str):
     import glob as _glob
     try:
-        subprocess.run([cmd, '-version'], capture_output=True, timeout=5)
+        # Check if already in PATH
+        subprocess.run([cmd, '--version'], capture_output=True, timeout=5)
         return cmd
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.SubprocessError):
         pass
-    except Exception:
-        return cmd
+
     search_dirs = (
         _glob.glob(r'C:\Program Files\Microsoft\jdk-*\bin') +
         _glob.glob(r'C:\Program Files\Eclipse Adoptium\jdk-*\bin') +
         _glob.glob(r'C:\Program Files\Java\jdk-*\bin') +
+        _glob.glob(r'C:\MinGW\bin') +
+        _glob.glob(r'C:\msys64\mingw64\bin') +
+        _glob.glob(r'C:\msys64\ucrt64\bin') +
+        _glob.glob(r'C:\Program Files\mingw-w64\*\mingw64\bin') +
+        _glob.glob(r'C:\TDM-GCC-64\bin') +
         _glob.glob('/usr/lib/jvm/*/bin') +
+        _glob.glob('/usr/bin') +
+        _glob.glob('/usr/local/bin') +
         _glob.glob(os.path.expanduser('~/.jdk/*/bin'))
     )
     for d in search_dirs:
@@ -489,6 +506,82 @@ def _find_tool(cmd: str):
         if os.path.isfile(candidate + '.exe'):
             return candidate + '.exe'
     return None
+
+
+def _run_wandbox(language: str, code: str, input_data: str) -> str:
+    """Remote execution fallback via Wandbox when local compiler is unavailable."""
+    WANDBOX_URL = "https://wandbox.org/api/compile.json"
+
+    # Correct Wandbox compiler IDs (verified from /api/list.json)
+    compilers = {
+        "python": "cpython-head",
+        "java": "openjdk-jdk-21+35",
+        "c": "gcc-head-c",          # <-- must be gcc-head-c for C, not gcc-head (C++)
+    }
+
+    payload = {
+        "compiler": compilers.get(language, "gcc-head-c"),
+        "code": code,
+        "stdin": input_data or "",
+        "save": False,
+    }
+
+    try:
+        resp = requests.post(WANDBOX_URL, json=payload, timeout=15)
+        if resp.status_code != 200:
+            return f"Remote Execution Error (HTTP {resp.status_code})"
+
+        data = resp.json()
+        compiler_err  = (data.get("compiler_error") or "").strip()
+        program_out   = (data.get("program_output") or "").strip()
+        program_err   = (data.get("program_error")  or "").strip()
+        exit_status   = str(data.get("status", "0"))
+
+        # ── Friendly hint for missing main() / entry-point ────────────────
+        if compiler_err and (
+            "undefined reference to `main'" in compiler_err or
+            "undefined reference to 'main'" in compiler_err
+        ):
+            lang_hint = {
+                "c": (
+                    "Your C code is missing a main() function.\n"
+                    "Every C program must have:\n\n"
+                    "  int main() {\n"
+                    "      // put your code here\n"
+                    "      return 0;\n"
+                    "  }"
+                ),
+                "java": (
+                    "Your Java code is missing a main() method.\n"
+                    "Add this to your class:\n\n"
+                    "  public static void main(String[] args) {\n"
+                    "      // put your code here\n"
+                    "  }"
+                ),
+            }
+            return "Compilation Error: No main() entry point found.\n\n" + lang_hint.get(language, "")
+
+        # ── Compiler error: strip noisy linker/path lines ─────────────────
+        if compiler_err:
+            clean = []
+            for line in compiler_err.splitlines():
+                if line.startswith("/usr/bin/ld"):  continue
+                if "collect2: error:" in line:       continue
+                if line.strip():                     clean.append(line)
+            return "Compilation Error:\n" + "\n".join(clean)
+
+        # ── Successful execution ──────────────────────────────────────────
+        output = program_out
+        if program_err:
+            output = (output + "\n" + program_err).strip()
+        if not output and exit_status != "0":
+            output = f"Runtime Error (exit code {exit_status})"
+        return output
+
+    except requests.Timeout:
+        return "Remote Execution Timeout: the code took too long to compile or run."
+    except Exception as exc:
+        return f"Remote Connection Error: {exc}"
 
 
 def get_file_extension(language: str) -> str:
@@ -507,19 +600,39 @@ def run_code(file_path, language, code=None, input_data=None):
                 python_cmd = 'python3'
             except (subprocess.SubprocessError, FileNotFoundError):
                 python_cmd = 'python'
-            result = subprocess.run([python_cmd, file_path], **kwargs)
+            
+            # Final check - if python cmd itself isn't found, fallback to piston
+            try:
+                result = subprocess.run([python_cmd, file_path], **kwargs)
+            except (FileNotFoundError, subprocess.SubprocessError):
+                return _run_wandbox(language, code or '', input_data or '')
 
         elif language == 'c':
             gcc_path = _find_tool('gcc')
             if not gcc_path:
-                return "Error: C compiler (gcc) is not installed on the server."
+                # No local GCC found — fall back to Wandbox remote compiler
+                # Read the source from file so Wandbox gets the full code
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as _f:
+                        _src = _f.read()
+                except Exception:
+                    _src = code or ''
+                return _run_wandbox(language, _src, input_data or '')
+
             output_path = file_path.replace('.c', '')
             compile_result = subprocess.run(
                 [gcc_path, file_path, '-o', output_path],
                 capture_output=True, text=True, timeout=_EXEC_TIMEOUT
             )
             if compile_result.returncode != 0:
-                return "Compilation Error:\n" + _sanitize_path(compile_result.stderr)
+                # Clean up noisy linker paths before returning to student
+                raw_err = compile_result.stderr
+                clean = []
+                for ln in raw_err.splitlines():
+                    if ln.startswith('/usr/bin/ld'):  continue
+                    if 'collect2: error:' in ln:       continue
+                    if ln.strip():                     clean.append(ln)
+                return "Compilation Error:\n" + _sanitize_path("\n".join(clean))
             result = subprocess.run([output_path], **kwargs)
             try:
                 os.unlink(output_path)
@@ -528,11 +641,9 @@ def run_code(file_path, language, code=None, input_data=None):
 
         elif language == 'java':
             javac_path = _find_tool('javac')
-            if not javac_path:
-                return "Error: Java compiler (javac) is not installed on the server."
             java_path = _find_tool('java')
-            if not java_path:
-                return "Error: Java runtime (java) is not installed on the server."
+            if not javac_path or not java_path:
+                return _run_wandbox(language, code or '', input_data or '')
             match = re.search(r'\bpublic\s+class\s+(\w+)', code or '')
             if not match:
                 return "Error: Could not find a public class declaration in the Java code."

@@ -77,21 +77,26 @@ class QuestionAdmin(admin.ModelAdmin):
 
         if round_number == 2:
             return (
-                ('Round 2 — Code Debugging', {
+                ('Round 2 — Language-Specific Snippets', {
                     'fields': (
                         'round_number',
                         'points',
                         'difficulty',
                         'text',
-                        'code_snippet',
+                        'code_python',
+                        'test_cases_python',
+                        'code_java',
+                        'test_cases_java',
+                        'code_c',
+                        'test_cases_c',
                         'examples',
                         'constraints',
                         'test_cases',
                     ),
                     'description': (
-                        'Fill in the problem statement, starter/buggy code, examples, '
-                        'constraints, and test cases. '
-                        'test_cases format: [{"input": "...", "expected_output": "..."}]'
+                        'Enter the problem statement, snippets, and optionally, language-specific test cases. '
+                        'Test cases use JSON format: [{"input": "5", "expected_output": "120"}]. '
+                        'Keys "input", "stdin", "in" are accepted for input; "expected_output", "expected", "output" for output.'
                     ),
                 }),
             )
@@ -102,14 +107,14 @@ class QuestionAdmin(admin.ModelAdmin):
                         'round_number',
                         'points',
                         'text',
-                        'code_snippet',
+                        'code_python',
                         'option_a',
                         'option_b',
                         'option_c',
                         'option_d',
                         'correct_option',
                     ),
-                    'description': 'Fill in the question text, four answer options, and mark the correct one.',
+                    'description': 'Fill in the question text, code (if any), options, and mark the correct one.',
                 }),
             )
 
@@ -143,17 +148,41 @@ class StudentAdmin(admin.ModelAdmin):
 
 @admin.register(Leaderboard)
 class LeaderboardAdmin(admin.ModelAdmin):
-    list_display    = ('id', 'name', 'email', 'round1_score', 'round2_score', 'total_score', 'round2_qualified')
-    ordering        = ('-total_score',)
+    list_display    = ('rank', 'name', 'email', 'college', 'round1_score', 'round2_score', 'total_score', 'round2_qualified')
+    ordering        = ('-total_score', '-round2_score', 'id')
     readonly_fields = ('id', 'name', 'email', 'department', 'college', 'year',
                        'round1_score', 'round2_score', 'total_score',
                        'round1_completed', 'round2_qualified', 'round2_completed')
+    search_fields   = ('name', 'email', 'college')
+    list_filter     = ('round2_qualified', 'round2_completed')
+    list_per_page   = 50
 
     def has_add_permission(self, request):
         return False
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def rank(self, obj):
+        # Rank is computed from position in the ordered queryset
+        qs = Leaderboard.objects.order_by('-total_score', '-round2_score', 'id')
+        ids = list(qs.values_list('id', flat=True))
+        try:
+            position = ids.index(obj.id) + 1
+        except ValueError:
+            return '-'
+        if position == 1:
+            return format_html('<strong style="color:#f59e0b;font-size:1.2em">🥇 1</strong>')
+        if position == 2:
+            return format_html('<strong style="color:#94a3b8;font-size:1.1em">🥈 2</strong>')
+        if position == 3:
+            return format_html('<strong style="color:#b45309;font-size:1.1em">🥉 3</strong>')
+        return format_html('<span style="color:#64748b;font-weight:600">#{}</span>', position)
+    rank.short_description = 'Rank'
+    rank.admin_order_field = None  # Computed, not DB-sortable directly
 
 
 @admin.register(StudentAnswer)

@@ -8,13 +8,13 @@ const QUESTION_TIME = 5 * 60;
 const MAX_TAB_SWITCHES = 3;
 
 const STARTER_TEMPLATES = {
-  python: (snippet) => snippet || "# Fix the bug and write your solution here\n\n",
-  java: (snippet) => {
-    if (snippet) return snippet;
+  python: (q) => q?.code_python || "# Fix the bug and write your solution here\n\n",
+  java: (q) => {
+    if (q?.code_java) return q.code_java;
     return `import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here\n    }\n}`;
   },
-  c: (snippet) =>
-    snippet ||
+  c: (q) =>
+    q?.code_c ||
     `#include <stdio.h>\n\nint main() {\n    // Write your solution here\n    return 0;\n}`,
 };
 
@@ -210,11 +210,11 @@ function TestCasePanel({ testResults, output, isCompiling, activeTab, setActiveT
                   <div className="r2-tc-preview-header">Test Case {i + 1}</div>
                   <div className="r2-tc-preview-row">
                     <span>stdin Input:</span>
-                    <pre>{tc.input !== "" && tc.input !== undefined ? tc.input : "(no input)"}</pre>
+                    <pre>{(tc.input ?? tc.stdin ?? tc.in ?? "") !== "" ? (tc.input ?? tc.stdin ?? tc.in) : "(no input)"}</pre>
                   </div>
                   <div className="r2-tc-preview-row">
                     <span>Expected Output:</span>
-                    <pre>{tc.expected_output}</pre>
+                    <pre>{(tc.expected_output ?? tc.expected ?? tc.output ?? "") !== "" ? (tc.expected_output ?? tc.expected ?? tc.output) : "(no expected output defined)"}</pre>
                   </div>
                 </div>
               ))
@@ -393,8 +393,16 @@ function Round2() {
         const data = await questionsApi.listStudent(2);
         if (Array.isArray(data) && data.length > 0) {
           setQuestions(data);
-          const draft = localStorage.getItem("r2_draft_q0_python");
-          setCode(draft || STARTER_TEMPLATES.python(data[0].code_snippet));
+          const firstQ = data[0];
+          // Determine initial language: favor python if code exists, else first one with code
+          let lang = "python";
+          if (!firstQ.code_python) {
+            if (firstQ.code_java) lang = "java";
+            else if (firstQ.code_c) lang = "c";
+          }
+          setLanguage(lang);
+          const draft = localStorage.getItem(`r2_draft_q0_${lang}`);
+          setCode(draft || STARTER_TEMPLATES[lang](firstQ));
         }
       } catch (err) {
         console.error("Failed to fetch questions:", err);
@@ -462,10 +470,15 @@ function Round2() {
     } else {
       const nextIdx = cIdx + 1;
       const nextQ = qs[nextIdx];
-      const lang = langRef.current;
+      let lang = "python";
+      if (!nextQ.code_python) {
+        if (nextQ.code_java) lang = "java";
+        else if (nextQ.code_c) lang = "c";
+      }
+      setLanguage(lang);
       const draft = localStorage.getItem(`r2_draft_q${nextIdx}_${lang}`);
       setCurrentIndex(nextIdx);
-      setCode(draft || STARTER_TEMPLATES[lang]?.(nextQ.code_snippet) || nextQ.code_snippet || "");
+      setCode(draft || STARTER_TEMPLATES[lang](nextQ));
       setTestResults(null);
       setRunError(null);
       setOutput("");
@@ -512,7 +525,12 @@ function Round2() {
     const currentCode = codeRef.current.trim();
     const currentLang = langRef.current;
     const q = qRef.current[idxRef.current];
-    const tcCases = q?.test_cases || [];
+    
+    // Choose test cases: lang-specific OR fallback to global
+    const langKey = `test_cases_${currentLang}`;
+    const tcCases = (q && q[langKey] && q[langKey].length > 0) 
+      ? q[langKey] 
+      : (q?.test_cases || []);
 
     if (!currentCode) {
       triggerWarning("⚠ Please write some code before running tests.");
@@ -562,8 +580,8 @@ function Round2() {
 
     for (let i = 0; i < tcCases.length; i++) {
       const tc = tcCases[i];
-      const stdinInput = tc.input ?? "";          // exact value from admin, passed as-is
-      const expectedRaw = tc.expected_output ?? "";
+      const stdinInput = (tc.input ?? tc.stdin ?? tc.in ?? "").toString();
+      const expectedRaw = (tc.expected_output ?? tc.expected ?? tc.output ?? "").toString();
       const expectedNorm = normalizeOutput(expectedRaw);
 
       try {
@@ -622,7 +640,7 @@ function Round2() {
     setLanguage(lang);
     const q = qRef.current[idxRef.current];
     const draft = localStorage.getItem(`r2_draft_q${idxRef.current}_${lang}`);
-    setCode(draft || STARTER_TEMPLATES[lang]?.(q?.code_snippet) || q?.code_snippet || "");
+    setCode(draft || STARTER_TEMPLATES[lang](q));
     setTestResults(null);
     setRunError(null);
     setOutput("");
@@ -718,10 +736,6 @@ function Round2() {
         </div>
 
         <div className="r2-navbar-right">
-          <div className="r2-live-score">
-            <span className="r2-live-score-label">Score</span>
-            <span className="r2-live-score-val">{score}</span>
-          </div>
           {allPassed && (
             <div className="r2-all-passed-chip"><span>✓</span> All Tests Pass</div>
           )}
@@ -813,7 +827,7 @@ function Round2() {
               <button className="r2-run-tests-btn" onClick={runTests} disabled={isCompiling} title="Run code against all test cases automatically">
                 {isCompiling
                   ? <><span className="r2-spin">⟳</span> Running…</>
-                  : <>▶ Run Tests ({q.test_cases?.length || 0})</>
+                  : <>▶ Run Tests ({(q[`test_cases_${language}`]?.length > 0 ? q[`test_cases_${language}`] : q.test_cases)?.length || 0})</>
                 }
               </button>
             </div>
@@ -872,7 +886,7 @@ function Round2() {
             isCompiling={isCompiling}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
-            testCases={q.test_cases}
+            testCases={q[`test_cases_${language}`]?.length > 0 ? q[`test_cases_${language}`] : q.test_cases}
             runError={runError}
           />
         </div>

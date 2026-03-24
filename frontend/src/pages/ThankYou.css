@@ -71,6 +71,77 @@
   font-size: 1.1rem;
 }
 
+/* ─── Final Score Card ─── */
+.ty-score-card {
+  margin: 2rem auto 0;
+  max-width: 460px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 20px;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35);
+  animation: scoreSlideIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes scoreSlideIn {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ty-score-header {
+  background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.7rem 1rem;
+}
+
+.ty-score-rows {
+  padding: 0.5rem 0;
+}
+
+.ty-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ty-score-row:last-child { border-bottom: none; }
+
+.ty-score-row.total {
+  background: rgba(74, 222, 128, 0.08);
+  border-top: 1px solid rgba(74, 222, 128, 0.2);
+  border-bottom: none;
+}
+
+.ty-score-label {
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+.ty-score-row.total .ty-score-label {
+  color: #e2e8f0;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.ty-score-value {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #e2e8f0;
+}
+
+.ty-score-row.total .ty-score-value {
+  color: #4ade80;
+  font-size: 1.4rem;
+}
+
 /* Scoreboard */
 .ty-scoreboard {
   background: rgba(255,255,255,0.07);

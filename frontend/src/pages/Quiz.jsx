@@ -234,8 +234,8 @@ function Quiz() {
 
       <div className="question-section">
         <h2>{currentQuestion.text}</h2>
-        {currentQuestion.code_snippet && (
-          <pre className="code-box">{currentQuestion.code_snippet}</pre>
+        {currentQuestion.code_python && (
+          <pre className="code-box">{currentQuestion.code_python}</pre>
         )}
 
         <div className="options">

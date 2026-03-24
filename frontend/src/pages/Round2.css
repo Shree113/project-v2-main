@@ -188,14 +188,17 @@
 /* ── Violation Badge ──────────────────────────────────────────────── */
 .r2-violation-badge {
   position: fixed;
-  top: 64px;
-  right: 1rem;
-  padding: 0.4rem 0.9rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.35rem 1.1rem;
+  border-radius: 0 0 14px 14px;
+  font-size: 0.82rem;
   font-weight: 700;
   z-index: 9997;
   font-family: 'Outfit', sans-serif;
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
 }
 
 .r2-violation-badge.warn {

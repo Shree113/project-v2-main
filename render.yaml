@@ -50,6 +50,10 @@ services:
         source: /*
         destination: /index.html
     envVars:
+      # [M6] Use host property with proper format
       - key: VITE_API_URL
-        value: "https://quiz-backend-XXXX.onrender.com"
-
+        fromService:
+          type: web
+          name: quiz-backend
+          property: host
+        format: "https://{value}"

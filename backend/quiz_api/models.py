@@ -52,7 +52,9 @@ class Question(models.Model):
     ]
 
     text = models.TextField()
-    code_snippet = models.TextField(blank=True, default='')
+    code_python = models.TextField(blank=True, default='')
+    code_java = models.TextField(blank=True, default='')
+    code_c = models.TextField(blank=True, default='')
     option_a = models.CharField(max_length=500, blank=True, null=True)
     option_b = models.CharField(max_length=500, blank=True, null=True)
     option_c = models.CharField(max_length=500, blank=True, null=True)
@@ -63,7 +65,10 @@ class Question(models.Model):
     difficulty = models.CharField(max_length=50, default="Medium")
     examples = models.TextField(blank=True, null=True)
     constraints = models.TextField(blank=True, null=True)
-    test_cases = models.JSONField(default=list, blank=True)  # [{"input": "...", "expected_output": "..."}]
+    test_cases = models.JSONField(default=list, blank=True)  # Global default
+    test_cases_python = models.JSONField(default=list, blank=True)
+    test_cases_java = models.JSONField(default=list, blank=True)
+    test_cases_c = models.JSONField(default=list, blank=True)
 
     # Round assignment
     round_number = models.IntegerField(choices=ROUND_CHOICES, default=1)

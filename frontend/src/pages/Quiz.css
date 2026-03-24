@@ -282,13 +282,25 @@ body {
 
 .tab-switch-badge {
   position: fixed;
-  top: 1rem;
-  right: 1rem;
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  z-index: 9997;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 24px;
+  background: #f59e0b;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  z-index: 2000;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-top: none;
+  animation: slideDownBadge 0.3s ease-out;
+}
+
+@keyframes slideDownBadge {
+  from { transform: translate(-50%, -100%); }
+  to { transform: translate(-50%, 0); }
 }
 
 .tab-switch-badge.warn {
@@ -298,8 +310,6 @@ body {
 }
 
 .tab-switch-badge.danger {
-  background: #fee2e2;
-  color: #991b1b;
   border: 1px solid #fca5a5;
   animation: pulse 1s infinite;
 }

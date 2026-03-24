@@ -22,6 +22,20 @@ export default function ThankYou() {
     }))
   );
 
+  // Read results BEFORE clearing them
+  const [finalScore] = useState(() => {
+    try {
+      const r2 = JSON.parse(localStorage.getItem('round2Result') || '{}');
+      const r1 = JSON.parse(localStorage.getItem('round1Result') || '{}');
+      return {
+        round1: r1.round1_score ?? r2.round1_score ?? null,
+        round2: r2.round2_score ?? null,
+        total:  r2.total_score  ?? null,
+        name:   r2.name         ?? r1.name ?? null,
+      };
+    } catch { return null; }
+  });
+
   useEffect(() => {
     window.history.pushState(null, '', window.location.href);
     const blockBack = () => window.history.pushState(null, '', window.location.href);
@@ -73,6 +87,31 @@ export default function ThankYou() {
           <div className="ty-trophy">🏆</div>
           <h2 className="ty-title">Thank You!</h2>
           <p className="ty-subtitle">You have successfully completed the challenge.</p>
+
+          {/* ── Score Card ── */}
+          {finalScore && finalScore.total !== null && (
+            <div className="ty-score-card">
+              <div className="ty-score-header">Your Final Score</div>
+              <div className="ty-score-rows">
+                {finalScore.round1 !== null && (
+                  <div className="ty-score-row">
+                    <span className="ty-score-label">Round 1 (MCQ)</span>
+                    <span className="ty-score-value">{finalScore.round1} pts</span>
+                  </div>
+                )}
+                {finalScore.round2 !== null && (
+                  <div className="ty-score-row">
+                    <span className="ty-score-label">Round 2 (Debugging)</span>
+                    <span className="ty-score-value">{finalScore.round2} pts</span>
+                  </div>
+                )}
+                <div className="ty-score-row total">
+                  <span className="ty-score-label">Total Score</span>
+                  <span className="ty-score-value">{finalScore.total} pts</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <p className="ty-footer-note" style={{ paddingTop: '2rem' }}>

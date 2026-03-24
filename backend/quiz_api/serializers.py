@@ -30,10 +30,11 @@ class QuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
         fields = [
-            'id', 'text', 'code_snippet',
+            'id', 'text', 'code_python', 'code_java', 'code_c',
             'option_a', 'option_b', 'option_c', 'option_d',
             'correct_option', 'round_number', 'points',
             'difficulty', 'examples', 'constraints', 'test_cases',
+            'test_cases_python', 'test_cases_java', 'test_cases_c',
             'created_at'
         ]
 
@@ -41,8 +42,14 @@ class QuestionSerializer(serializers.ModelSerializer):
         if not isinstance(value, list):
             raise serializers.ValidationError("Test cases must be a list.")
         for tc in value:
-            if not isinstance(tc, dict) or 'input' not in tc or 'expected_output' not in tc:
-                raise serializers.ValidationError("Each test case must be a dictionary with 'input' and 'expected_output' keys.")
+            if not isinstance(tc, dict):
+                raise serializers.ValidationError("Each test case must be a dictionary.")
+            # check for some variation of input key
+            if not any(k in tc for k in ['input', 'stdin', 'in']):
+                raise serializers.ValidationError("Each test case must contain an input field ('input', 'stdin', or 'in').")
+            # check for some variation of expected output key
+            if not any(k in tc for k in ['expected_output', 'expected', 'output', 'out']):
+                raise serializers.ValidationError("Each test case must contain an expected output field.")
         return value
 
     def validate(self, data):
