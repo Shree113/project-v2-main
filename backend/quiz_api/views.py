@@ -508,6 +508,43 @@ def _find_tool(cmd: str):
     return None
 
 
+def _run_piston(language: str, code: str, input_data: str) -> str:
+    """Alternative remote execution fallback via Piston API."""
+    PISTON_URL = "https://emkc.org/api/v2/piston/execute"
+    
+    # Correct Piston runtime IDs and versions
+    runtimes = {
+        "python": {"language": "python", "version": "3.10.0"},
+        "java":   {"language": "java",   "version": "15.0.2"},
+        "c":      {"language": "c",      "version": "10.2.1"}
+    }
+    
+    conf = runtimes.get(language, runtimes["python"])
+    
+    payload = {
+        "language": conf["language"],
+        "version": conf["version"],
+        "files": [{"content": code}],
+        "stdin": input_data or ""
+    }
+    
+    try:
+        resp = requests.post(PISTON_URL, json=payload, timeout=10)
+        if resp.status_code != 200:
+            return f"Remote Execution Error (Piston HTTP {resp.status_code})"
+        
+        data = resp.json()
+        run = data.get("run", {})
+        output = run.get("output", "")
+        stderr = run.get("stderr", "")
+        
+        if not output and stderr:
+            return f"Runtime Error:\n{stderr}"
+        return output or "Execution completed (No output)"
+    except Exception as e:
+        return f"Remote Fallback Error: {str(e)}"
+
+
 def _run_wandbox(language: str, code: str, input_data: str) -> str:
     """Remote execution fallback via Wandbox when local compiler is unavailable."""
     WANDBOX_URL = "https://wandbox.org/api/compile.json"
@@ -596,9 +633,9 @@ def _run_wandbox(language: str, code: str, input_data: str) -> str:
         return output
 
     except requests.Timeout:
-        return "Remote Execution Timeout: the code took too long to compile or run."
+        return _run_piston(language, code, input_data)
     except Exception as exc:
-        return f"Remote Connection Error: {exc}"
+        return _run_piston(language, code, input_data)
 
 
 def get_file_extension(language: str) -> str:
