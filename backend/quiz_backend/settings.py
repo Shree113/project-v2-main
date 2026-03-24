@@ -16,8 +16,15 @@ if 'RENDER' in os.environ:
 
 # Security settings
 SECURE_BROWSER_XSS_FILTER = True
-X_FRAME_OPTIONS = 'DENY'
+X_FRAME_OPTIONS = 'SAMEORIGIN'
 SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# For Render deployment, handle SSL correctly
+if 'RENDER' in os.environ:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -38,15 +45,26 @@ CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'False').lower() ==
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
 CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
 
+def _normalize_origins(origins):
+    normalized = []
+    for o in origins:
+        o = o.strip()
+        if not o: continue
+        if not o.startswith('http'):
+            normalized.append(f'https://{o}')
+        else:
+            normalized.append(o)
+    return normalized
+
 # If CORS_ALLOW_ALL_ORIGINS is True, override CORS_ALLOWED_ORIGINS
 if CORS_ALLOW_ALL_ORIGINS:
     CORS_ALLOW_ALL_ORIGINS = True
     CORS_ALLOWED_ORIGINS = []
 else:
     CORS_ALLOW_ALL_ORIGINS = False
-    # Filter out empty strings and ensure each origin has a protocol
-    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS if origin.strip()]
-    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in CSRF_TRUSTED_ORIGINS if origin.strip()]
+    CORS_ALLOWED_ORIGINS = _normalize_origins(CORS_ALLOWED_ORIGINS)
+
+CSRF_TRUSTED_ORIGINS = _normalize_origins(CSRF_TRUSTED_ORIGINS)
 
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 CORS_ALLOW_HEADERS = ["*"]
