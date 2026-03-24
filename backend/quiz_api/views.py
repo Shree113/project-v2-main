@@ -621,14 +621,27 @@ def run_code(file_path, language, code=None, input_data=None):
             kwargs["input"] = input_data.replace('\r\n', '\n')
 
         if language == 'python':
-            # ── First attempt local Python execution using current sys.executable ──
-            try:
-                # We use the current Python interpreter running the Django app
-                import sys
-                result = subprocess.run([sys.executable, file_path], **kwargs)
-            except (FileNotFoundError, subprocess.SubprocessError) as _e:
-                # Fallback to remote if local fails
-                return _run_wandbox(language, code_str, input_data or '')
+            # ── For Python, we prioritize Remote Execution (Piston/Wandbox) ──
+            # This is because local execution on Render often has stdin pipe issues.
+            remote_output = _run_piston(language, code_str, input_data)
+            
+            # If Piston failed or returned an execution error, try Wandbox
+            if "Error" in remote_output or "failed" in remote_output:
+                remote_output = _run_wandbox(language, code_str, input_data or '')
+            
+            # If both remote options failed, only then attempt local execution
+            if "Error" in remote_output or "Connection" in remote_output:
+                try:
+                    import sys
+                    result = subprocess.run([sys.executable, file_path], **kwargs)
+                    output = result.stdout
+                    if result.returncode != 0:
+                        output += f"\nError (exit code {result.returncode}):\n" + _sanitize_path(result.stderr)
+                    return output
+                except Exception as _e:
+                    return remote_output # Return the remote error if local also fails
+            
+            return remote_output
 
         elif language == 'c':
             gcc_path = _find_tool('gcc')
