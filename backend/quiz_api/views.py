@@ -512,11 +512,11 @@ def _run_wandbox(language: str, code: str, input_data: str) -> str:
     """Remote execution fallback via Wandbox when local compiler is unavailable."""
     WANDBOX_URL = "https://wandbox.org/api/compile.json"
 
-    # Correct Wandbox compiler IDs (verified from /api/list.json)
+    # Correct Wandbox compiler IDs (stable versions)
     compilers = {
-        "python": "cpython-head",
+        "python": "cpython-3.11.0",
         "java": "openjdk-jdk-21+35",
-        "c": "gcc-head-c",          # <-- must be gcc-head-c for C, not gcc-head (C++)
+        "c": "gcc-head-c",
     }
 
     # ── Java Specific: Ensure code works on Wandbox ───────────────────────
@@ -541,13 +541,18 @@ def _run_wandbox(language: str, code: str, input_data: str) -> str:
     try:
         resp = requests.post(WANDBOX_URL, json=payload, timeout=15)
         if resp.status_code != 200:
-            return f"Remote Execution Error (HTTP {resp.status_code})"
+            # Fallback to Piston API if Wandbox fails
+            return _run_piston(language, code, input_data)
 
         data = resp.json()
         compiler_err  = (data.get("compiler_error") or "").strip()
         program_out   = (data.get("program_output") or "").strip()
         program_err   = (data.get("program_error")  or "").strip()
         exit_status   = str(data.get("status", "0"))
+
+        # ── Check for execution failure (like the catatonit error) ────────
+        if not compiler_err and not program_out and not program_err and exit_status != "0":
+            return _run_piston(language, code, input_data)
 
         # ── Friendly hint for missing main() / entry-point ────────────────
         if compiler_err and (
@@ -616,8 +621,14 @@ def run_code(file_path, language, code=None, input_data=None):
             kwargs["input"] = input_data.replace('\r\n', '\n')
 
         if language == 'python':
-            # ── Use remote compiler for consistency and reliability on Render ──
-            return _run_wandbox(language, code_str, input_data or '')
+            # ── First attempt local Python execution using current sys.executable ──
+            try:
+                # We use the current Python interpreter running the Django app
+                import sys
+                result = subprocess.run([sys.executable, file_path], **kwargs)
+            except (FileNotFoundError, subprocess.SubprocessError) as _e:
+                # Fallback to remote if local fails
+                return _run_wandbox(language, code_str, input_data or '')
 
         elif language == 'c':
             gcc_path = _find_tool('gcc')
