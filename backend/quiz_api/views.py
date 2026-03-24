@@ -616,17 +616,8 @@ def run_code(file_path, language, code=None, input_data=None):
             kwargs["input"] = input_data.replace('\r\n', '\n')
 
         if language == 'python':
-            try:
-                subprocess.run(['python3', '--version'], capture_output=True, check=True, timeout=5)
-                python_cmd = 'python3'
-            except (subprocess.SubprocessError, FileNotFoundError):
-                python_cmd = 'python'
-            
-            # Final check - if python cmd itself isn't found, fallback to piston
-            try:
-                result = subprocess.run([python_cmd, file_path], **kwargs)
-            except (FileNotFoundError, subprocess.SubprocessError):
-                return _run_wandbox(language, code or '', input_data or '')
+            # ── Use remote compiler for consistency and reliability on Render ──
+            return _run_wandbox(language, code_str, input_data or '')
 
         elif language == 'c':
             gcc_path = _find_tool('gcc')
