@@ -34,8 +34,14 @@ services:
   - type: web
     name: quiz-frontend
     env: static
-    buildCommand: "cd frontend && npm install && VITE_API_URL=${RENDER_EXTERNAL_URL} npm run build" # Note: This is a bit tricky on Render
+    buildCommand: "cd frontend && npm install && npm run build"
     staticPublishPath: "frontend/dist"
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: quiz-backend
+          property: url
     routes:
       - type: rewrite
         source: "/*"

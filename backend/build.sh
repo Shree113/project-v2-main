@@ -2,6 +2,9 @@
 # exit on error
 set -o errexit
 
+# [C2/H6] Change to backend directory since script is run from project root
+cd backend
+
 pip install -r requirements.txt
 
 python manage.py collectstatic --no-input
