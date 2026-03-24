@@ -522,13 +522,14 @@ def _run_wandbox(language: str, code: str, input_data: str) -> str:
     # ── Java Specific: Ensure code works on Wandbox ───────────────────────
     if language == "java":
         # Wandbox OpenJDK expects class Main if it's public, or just any class if not.
-        # We'll normalize it to 'public class Main' if it's not already.
-        if "public class Main" not in code:
-            # Replace 'public class <AnyName>' with 'public class Main'
-            code = re.sub(r'public\s+class\s+\w+', 'public class Main', code)
-            # If no public class at all, try to make the first class public and named Main
-            if "public class Main" not in code:
-                code = re.sub(r'class\s+\w+', 'public class Main', code, count=1)
+        # However, it often names the main file 'prog.java'.
+        # To avoid "class Main is public, should be declared in Main.java",
+        # we remove the 'public' keyword from the main class declaration.
+        code = re.sub(r'public\s+class\s+', 'class ', code)
+        
+        # Also ensure there is at least a class named Main if not present
+        if "class Main" not in code:
+            code = re.sub(r'class\s+\w+', 'class Main', code, count=1)
 
     payload = {
         "compiler": compilers.get(language, "gcc-head-c"),
@@ -609,7 +610,7 @@ def run_code(file_path, language, code=None, input_data=None):
                     code_str = _f.read()
             except: pass
 
-        kwargs = {"capture_output": True, "text": True, "timeout": _EXEC_TIMEOUT}
+        kwargs = {"capture_output": True, "text": True, "timeout": _EXEC_TIMEOUT, "input": ""}
         # ── Normalize line endings for input ──
         if input_data:
             kwargs["input"] = input_data.replace('\r\n', '\n')
