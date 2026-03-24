@@ -19,10 +19,7 @@ services:
       - key: CORS_ALLOW_ALL_ORIGINS
         value: "True" # You can restrict this later to the frontend URL
       - key: FRONTEND_URL
-        fromService:
-          type: web
-          name: quiz-frontend
-          property: url
+        sync: false
       - key: DJANGO_SUPERUSER_USERNAME
         sync: false
       - key: DJANGO_SUPERUSER_EMAIL
@@ -38,10 +35,7 @@ services:
     staticPublishPath: "frontend/dist"
     envVars:
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: quiz-backend
-          property: url
+        sync: false
     routes:
       - type: rewrite
         source: "/*"
