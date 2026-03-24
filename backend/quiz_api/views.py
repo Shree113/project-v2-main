@@ -519,6 +519,17 @@ def _run_wandbox(language: str, code: str, input_data: str) -> str:
         "c": "gcc-head-c",          # <-- must be gcc-head-c for C, not gcc-head (C++)
     }
 
+    # ── Java Specific: Ensure code works on Wandbox ───────────────────────
+    if language == "java":
+        # Wandbox OpenJDK expects class Main if it's public, or just any class if not.
+        # We'll normalize it to 'public class Main' if it's not already.
+        if "public class Main" not in code:
+            # Replace 'public class <AnyName>' with 'public class Main'
+            code = re.sub(r'public\s+class\s+\w+', 'public class Main', code)
+            # If no public class at all, try to make the first class public and named Main
+            if "public class Main" not in code:
+                code = re.sub(r'class\s+\w+', 'public class Main', code, count=1)
+
     payload = {
         "compiler": compilers.get(language, "gcc-head-c"),
         "code": code,
@@ -590,9 +601,18 @@ def get_file_extension(language: str) -> str:
 
 def run_code(file_path, language, code=None, input_data=None):
     try:
+        # ── Ensure code is a string ──
+        code_str = code or ""
+        if not code_str and file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as _f:
+                    code_str = _f.read()
+            except: pass
+
         kwargs = {"capture_output": True, "text": True, "timeout": _EXEC_TIMEOUT}
+        # ── Normalize line endings for input ──
         if input_data:
-            kwargs["input"] = input_data
+            kwargs["input"] = input_data.replace('\r\n', '\n')
 
         if language == 'python':
             try:
@@ -644,13 +664,21 @@ def run_code(file_path, language, code=None, input_data=None):
             java_path = _find_tool('java')
             if not javac_path or not java_path:
                 return _run_wandbox(language, code or '', input_data or '')
+            
+            # ── Handle public vs non-public class for local compilation ────
             match = re.search(r'\bpublic\s+class\s+(\w+)', code or '')
-            if not match:
-                return "Error: Could not find a public class declaration in the Java code."
-            class_name = match.group(1)
+            if match:
+                class_name = match.group(1)
+            else:
+                # If no public class, check for any class
+                match = re.search(r'\bclass\s+(\w+)', code or '')
+                class_name = match.group(1) if match else "Main"
+            
             java_dir = tempfile.mkdtemp()
             try:
                 java_file = os.path.join(java_dir, f'{class_name}.java')
+                # If student provided 'public class Main' but it fails because 
+                # of filename, we ensure the filename matches their class name.
                 with open(java_file, 'w', encoding='utf-8') as f:
                     f.write(code)
                 compile_result = subprocess.run(
