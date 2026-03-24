@@ -213,6 +213,45 @@ You may alternatively deploy the database to **Supabase** or **AWS RDS**, and ho
 
 ---
 
+## 🚀 Deployment
+
+### Deploy to Render (Blueprint)
+
+This project is configured for one-click deployment to **Render** using the included `render.yaml` blueprint.
+
+1.  **Fork** this repository to your GitHub account.
+2.  Log in to [Render](https://render.com/).
+3.  Go to **Blueprints** and click **New Blueprint Instance**.
+4.  Connect your GitHub repository.
+5.  Render will automatically detect the `render.yaml` file and set up:
+    *   **PostgreSQL Database** (Free plan)
+    *   **Django Backend** (Web Service)
+    *   **React Frontend** (Static Site)
+6.  Set the following **Environment Variables** on the Render dashboard if prompted:
+    *   `DJANGO_SUPERUSER_USERNAME`: Your admin username.
+    *   `DJANGO_SUPERUSER_EMAIL`: Your admin email.
+    *   `DJANGO_SUPERUSER_PASSWORD`: Your admin password.
+7.  Once deployed, the backend will automatically run migrations and create the superuser.
+
+### Manual Deployment
+
+If you prefer to deploy manually:
+
+#### Backend (Django)
+1.  Set up a Python web service on Render.
+2.  Build Command: `./backend/build.sh`
+3.  Start Command: `gunicorn quiz_backend.wsgi:application --chdir backend`
+4.  Add environment variables: `DATABASE_URL`, `SECRET_KEY`, `DEBUG=False`, `ALLOWED_HOSTS=.render.com`, `CORS_ALLOW_ALL_ORIGINS=True`.
+
+#### Frontend (React)
+1.  Set up a Static Site on Render.
+2.  Build Command: `cd frontend && npm install && npm run build`
+3.  Publish Directory: `frontend/dist`
+4.  Add Environment Variable: `VITE_API_URL` (your backend URL).
+5.  Add a **Rewrite Rule**: `/*` ➔ `/index.html` (for SPA routing).
+
+---
+
 ## ⚖️ License
 
 Built for **code 144p 2K25**. All rights reserved. 
